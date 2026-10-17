@@ -9,25 +9,27 @@
 <body>
   <main>
     <div class="workspace">
-      <h1>snap solve</h1>
-      <div id="launch-screen" class="panel">
-        <h2 class="box-heading upload-heading">Add an image</h2>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-          <button class="image-picker" type="button" aria-controls="upload-image">
-            <img class="action-icon" src="{{ url_for('static', path='/icons/upload.png') }}" alt="">
-            Upload image
-          </button>
-          <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
-          <p class="selected-file" aria-live="polite">No image selected</p>
-        </form>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-          <button class="image-picker" type="button" aria-controls="take-image">
-            <img class="action-icon" src="{{ url_for('static', path='/icons/camera.png') }}" alt="">
-            Take image
-          </button>
-          <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
-          <p class="selected-file" aria-live="polite">No image selected</p>
-        </form>
+      <div id="launch-screen" class="launch-screen">
+        <h1>snap solve</h1>
+        <p class="launch-intro">Need to check your solution to a math problem?<br>Send over a picture of your work to get started.</p>
+        <div class="panel">
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <button class="image-picker" type="button" aria-controls="upload-image">
+              <img class="action-icon" src="{{ url_for('static', path='/icons/upload.png') }}" alt="">
+              Upload
+            </button>
+            <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
+            <p class="selected-file" aria-live="polite">No image selected</p>
+          </form>
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <button class="image-picker" type="button" aria-controls="take-image">
+              <img class="action-icon" src="{{ url_for('static', path='/icons/camera.png') }}" alt="">
+              Camera
+            </button>
+            <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+            <p class="selected-file" aria-live="polite">No image selected</p>
+          </form>
+        </div>
       </div>
       <p id="upload-error" role="alert" hidden></p>
       <div id="image-result" class="result-layout" hidden>
@@ -62,11 +64,11 @@
           <rect x="3" y="4" width="18" height="16" rx="3"></rect>
           <path d="M15 4v16"></path>
         </svg>
-        <h2 class="box-heading">Saved images</h2>
+        <span class="box-heading sidebar-brand">snap solve</span>
       </summary>
-      <button id="new-image" class="new-question" type="button">+ New question</button>
-      <p>Saved in this browser. Selecting an image sends it to Python for processing in memory, without saving it on the server.</p>
-      <p id="storage-status" role="status">Loading saved images…</p>
+      <button id="new-image" class="new-question" type="button">+ New problem</button>
+      <h2 class="box-heading saved-heading">Saved images</h2>
+      <p id="storage-status" role="status"></p>
       <ul id="saved-images"></ul>
     </details>
   </main>

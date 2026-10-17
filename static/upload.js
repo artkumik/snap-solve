@@ -61,7 +61,7 @@ function updateSelection(input) {
 async function showSavedImages() {
   const images = await imageStore('readonly', store => store.getAll());
   savedImages.replaceChildren();
-  storageStatus.textContent = images.length ? 'Images stay here until you delete them or browser storage is cleared.' : 'No saved images yet.';
+  storageStatus.textContent = '';
 
   for (const image of images.reverse()) {
     const item = document.createElement('li');
