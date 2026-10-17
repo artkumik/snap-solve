@@ -26,11 +26,7 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-<<<<<<< HEAD
 const RESULT_VERSION = 3; // 3: results include related videos (redo ones saved without)
-=======
-const RESULT_VERSION = 2;
->>>>>>> 35c014720f1369d63e67fb9498a370e06b395490
 
 function showResult(result) {
   document.getElementById('process-output').textContent = result == null ? '' : (

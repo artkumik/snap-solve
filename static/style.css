@@ -35,7 +35,7 @@ main:has(> .saved-images[open]) { grid-template-columns: 320px minmax(0, 1fr); g
   padding-block: 40px;
 }
 /* Dithered wave behind the launch screen, drawn by backdrop.js in the theme colors. */
-.backdrop { position: absolute; top: 0; left: 0; z-index: -1; pointer-events: none; image-rendering: pixelated; }
+.backdrop { position: fixed; top: 0; left: 0; z-index: -1; pointer-events: none; image-rendering: pixelated; }
 body:has(#launch-screen[hidden]) .backdrop { display: none; }
 .launch-screen:not([hidden]) { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .launch-screen h1 { width: min(100%, 480px); margin: 0 0 20px; color: var(--accent); font-family: ui-rounded, 'Arial Rounded MT Bold', 'Trebuchet MS', sans-serif; font-size: clamp(2.5rem, 6vw, 3.5rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1.2; }
@@ -167,7 +167,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   .video-grid { grid-template-columns: repeat(3, 220px); gap: 12px; }
 }
 
-.saved-images { position: sticky; top: 12px; height: calc(100svh - 24px); overflow-y: auto; padding: 12px; border-radius: 12px; background: var(--surface); }
+.saved-images { position: sticky; top: 12px; height: calc(100svh - 24px); overflow-y: auto; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--surface) 82%, transparent); }
 .saved-images:not([open]) { position: fixed; top: 16px; left: 16px; z-index: 10; width: 48px; height: 48px; padding: 0; border-radius: 50%; overflow: visible; }
 .saved-images:not([open]) > summary { width: 48px; height: 48px; justify-content: center; padding: 12px; border-radius: 50%; }
 .saved-images[open] > summary { position: relative; left: -8px; top: -8px; height: 48px; padding: 12px; }

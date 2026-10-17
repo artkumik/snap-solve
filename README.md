@@ -33,11 +33,8 @@ You also need a Gemini API key. Create a `.env` file in the project folder
 
 ```dotenv
 GEMINI_API_KEY=your-key-here
-<<<<<<< HEAD
-YOUTUBE_API_KEY=your-youtube-key-here
-=======
 GEMINI_MODEL=gemini-3.5-flash
->>>>>>> 35c014720f1369d63e67fb9498a370e06b395490
+YOUTUBE_API_KEY=your-youtube-key-here
 ```
 
 The server loads this file automatically, including when started from another folder.

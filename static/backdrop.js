@@ -14,8 +14,6 @@
   // 4x4 ordered-dither thresholds: blends two neighboring palette colors as an even dot pattern.
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
-  const workspace = document.querySelector('.workspace');
-  const sidebar = document.querySelector('.saved-images');
   const launch = document.getElementById('launch-screen');
   const canvas = document.createElement('canvas');
   canvas.className = 'backdrop';
@@ -38,15 +36,11 @@
     if (launch.hidden) return;
     const dpr = window.devicePixelRatio || 1;
     const dot = Math.max(1, Math.round(DOT * dpr)); // whole device pixels per dot
-    // The wave is framed to the launch area: centered on the content horizontally and on the
-    // launch screen vertically (which sits below the sidebar on phones). The canvas covers
-    // the page from the top down to the bottom of the launch screen.
-    const content = workspace.getBoundingClientRect();
-    const frame = launch.getBoundingClientRect();
-    const frameTop = frame.top + window.scrollY;
-    const frameHeight = Math.max(frame.height, 1);
-    const cols = Math.ceil((document.documentElement.clientWidth * dpr) / dot);
-    const rows = Math.floor(((frameTop + frameHeight) * dpr) / dot); // never past the launch screen
+    // Anchor the pattern to the viewport so sidebar and content changes cannot shift it.
+    const frameWidth = Math.max(document.documentElement.clientWidth, 1);
+    const frameHeight = Math.max(window.innerHeight, 1);
+    const cols = Math.ceil((frameWidth * dpr) / dot);
+    const rows = Math.ceil((frameHeight * dpr) / dot);
     canvas.width = cols;
     canvas.height = rows;
     canvas.style.width = `${(cols * dot) / dpr}px`;
@@ -54,18 +48,16 @@
 
     const colors = readPalette();
     const top = colors.length - 1;
-    const contentLeft = content.left + window.scrollX;
-    const contentWidth = Math.max(content.width, 1);
     const cssPerDot = dot / dpr;
 
     const context = canvas.getContext('2d');
     const image = context.createImageData(cols, rows);
     const pixels = image.data;
     for (let c = 0; c < cols; c++) {
-      const x = ((c + 0.5) * cssPerDot - contentLeft) / contentWidth;
+      const x = (c + 0.5) * cssPerDot / frameWidth;
       const centerY = CENTER + AMPLITUDE * Math.sin(2 * Math.PI * x + PHASE);
       for (let r = 0; r < rows; r++) {
-        const distance = (((r + 0.5) * cssPerDot - frameTop) / frameHeight - centerY) / SPREAD;
+        const distance = ((r + 0.5) * cssPerDot / frameHeight - centerY) / SPREAD;
         const level = PEAK * Math.exp(-Math.pow(Math.abs(distance) / FALLOFF, SHARPNESS));
         const base = Math.floor(level);
         const threshold = (BAYER[(r % 4) * 4 + (c % 4)] + 0.5) / 16;
@@ -91,9 +83,6 @@
   }
 
   window.addEventListener('resize', redraw);
-  // Sidebar opened/closed, or its saved-image list grew and pushed the launch screen down.
-  const resized = new ResizeObserver(redraw);
-  [workspace, launch, sidebar].forEach(element => resized.observe(element));
   new MutationObserver(redraw).observe(launch, { attributes: true, attributeFilter: ['hidden'] });
   draw();
 })();
