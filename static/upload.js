@@ -725,13 +725,17 @@ async function showSavedImages() {
     remove.type = 'button';
     remove.textContent = 'Delete';
     remove.setAttribute('aria-label', `Delete ${title}`);
+    remove.className = 'delete-question-action';
     remove.addEventListener('click', async () => {
+      remove.disabled = true;
       try {
         await deleteSavedImage(image.id);
         await showSavedImages();
       } catch {
         menu.open = false;
         showDeleteNotice(image.id, 'Could not delete this image. Please try again.');
+      } finally {
+        remove.disabled = false;
       }
     });
     const rename = document.createElement('button');
