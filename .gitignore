@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Random extra bs
+.aws/
+.codex/
+.agents/

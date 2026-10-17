@@ -12,11 +12,24 @@ to do list
 
 ## Run the website
 
+From the project folder, choose either setup.
+
+### Conda
+
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-flask --app app run --debug
+conda create --name snap-solve python=3.12 pip -y
+conda activate snap-solve
+python -m pip install -r requirements.txt
+python -m uvicorn app:app --reload
 ```
 
-Open http://localhost:5000.
+### pip 
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m uvicorn app:app --reload
+```
+
+Open http://localhost:8000.
