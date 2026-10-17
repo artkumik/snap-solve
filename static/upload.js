@@ -26,12 +26,106 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 3; // 3: results include related videos (redo ones saved without)
+const RESULT_VERSION = 7; // 7: fitted placeholder bounds are defined in process.py
+
+function isIncorrect(line) {
+  return line.valid === false || line.follows_from_previous === false || !!line.error;
+}
+
+function selectStep(index) {
+  document.querySelectorAll('.solution-line').forEach((item, i) => {
+    item.hidden = i !== index;
+    item.classList.toggle('is-selected', i === index);
+  });
+  document.querySelectorAll('.line-box').forEach(button => {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.step) === index));
+  });
+  const item = document.getElementById(`solution-step-${index}`);
+  item.focus({ preventScroll: true });
+  item.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+}
+
+function showLineBoxes(lines) {
+  const overlay = document.getElementById('line-overlays');
+  overlay.replaceChildren();
+  lines.forEach((line, index) => {
+    const bounds = line.bounds;
+    if (!isIncorrect(line) || !bounds) return;
+    const { left, right, top, bottom } = bounds;
+    if (![left, right, top, bottom].every(value => Number.isFinite(value) && value >= 0 && value <= 1)
+        || right <= left || bottom <= top) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'line-box';
+    button.dataset.step = index;
+    button.setAttribute('aria-label', `Explain error on line ${line.line ?? index + 1}`);
+    button.setAttribute('aria-controls', `solution-step-${index}`);
+    button.setAttribute('aria-pressed', 'false');
+    button.style.setProperty('--box-left', `${left * 100}%`);
+    button.style.setProperty('--box-top', `${top * 100}%`);
+    button.style.setProperty('--box-width', `${(right - left) * 100}%`);
+    button.style.setProperty('--box-height', `${(bottom - top) * 100}%`);
+    button.addEventListener('click', () => selectStep(index));
+    overlay.append(button);
+  });
+}
 
 function showResult(result) {
-  document.getElementById('process-output').textContent = result == null ? '' : (
-    typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-  );
+  const output = document.getElementById('process-output');
+  output.replaceChildren();
+  showLineBoxes(Array.isArray(result?.lines) ? result.lines : []);
+  if (typeof result === 'string') output.textContent = result;
+  if (result?.context) {
+    const context = document.createElement('p');
+    context.className = 'solution-context';
+    context.textContent = result.context.goal || result.context.task || '';
+    output.append(context);
+  }
+  if (result?.context_error) {
+    const warning = document.createElement('p');
+    warning.className = 'result-warning';
+    warning.textContent = result.context_error;
+    output.append(warning);
+  }
+  if (Array.isArray(result?.lines)) {
+    const lines = document.createElement('ol');
+    lines.className = 'solution-lines';
+    result.lines.forEach((line, index) => {
+      const item = document.createElement('li');
+      item.className = 'solution-line';
+      item.hidden = true;
+      item.id = `solution-step-${index}`;
+      item.tabIndex = -1;
+      const heading = document.createElement('div');
+      heading.className = 'line-heading';
+      const title = document.createElement('strong');
+      title.textContent = `Line ${line.line ?? index + 1}`;
+      const invalid = isIncorrect(line);
+      const status = document.createElement('span');
+      status.className = `line-status ${invalid ? 'is-invalid' : line.valid === true ? 'is-valid' : 'is-unchecked'}`;
+      status.textContent = invalid ? 'Invalid' : line.valid === true ? 'Valid' : 'Not checked';
+      heading.append(title, status);
+      const equation = document.createElement('p');
+      equation.className = 'line-math';
+      equation.textContent = line.latex || '';
+      item.append(heading, equation);
+      const error = line.error || (line.follows_from_previous === false
+        ? 'This step does not follow from the previous line; the two lines are not equivalent.' : '');
+      if (error) {
+        const message = document.createElement('p');
+        message.className = 'line-error';
+        message.textContent = error;
+        item.append(message);
+      } else if (index > 0 && line.follows_from_previous == null) {
+        const message = document.createElement('p');
+        message.className = 'line-note';
+        message.textContent = 'The step from the previous line could not be verified.';
+        item.append(message);
+      }
+      lines.append(item);
+    });
+    output.append(lines);
+  }
   showVideos(result?.videos, result?.context?.video_query);
 }
 
@@ -56,7 +150,9 @@ function showVideos(videos, query) {
   link.hidden = !search;
   if (search) {
     link.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(search)}`;
-    link.textContent = valid.length ? `More videos on YouTube: ${search}` : `Watch tutorials on YouTube: ${search}`;
+    link.textContent = valid.length ? 'More on YouTube ↗' : 'Search YouTube ↗';
+    link.title = search;
+    link.setAttribute('aria-label', `Search YouTube for ${search} (opens in a new tab)`);
   }
   document.querySelectorAll('#video-recommendations .video-card').forEach((card, i) => {
     const video = valid[i];
@@ -146,6 +242,7 @@ async function keepStoragePersistent() {
 }
 
 function showUploadPreview(file) {
+  document.getElementById('line-overlays').replaceChildren();
   const preview = document.getElementById('upload-preview');
   preview.onload = null;
   if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
@@ -208,6 +305,19 @@ async function deleteSavedImage(imageId) {
   if (imageId === activeImageId) showHome();
 }
 
+document.getElementById('delete-all-questions').addEventListener('click', async event => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await imageStore('readwrite', store => store.clear());
+    showHome();
+    await showSavedImages();
+  } catch {
+    storageStatus.textContent = 'Could not delete all questions. Please try again.';
+    button.disabled = !savedImages.children.length;
+  }
+});
+
 // Adds the server's result to an already-saved image record.
 async function saveResult(id, result) {
   // Keep the read and write atomic so a late result cannot recreate a deleted question.
@@ -230,6 +340,7 @@ function updateSelection(input) {
 
 async function showSavedImages() {
   const images = await imageStore('readonly', store => store.getAll());
+  document.getElementById('delete-all-questions').disabled = images.length === 0;
   savedImages.replaceChildren();
   storageStatus.textContent = '';
 

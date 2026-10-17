@@ -5,12 +5,43 @@ from videos import find_videos
 
 
 def read_lines(image: Image.Image) -> list[dict]:
-    """Turn the image into lines of LaTeX, e.g. [{"data": "x^2 = 3x"}, {"data": "x = 3"}].
+    """Placeholder lines with normalized symbol bounds fitted to test image 1.
 
-    TODO: replace this placeholder with the real handwriting reader.
-    When you do, bump RESULT_VERSION in static/upload.js so old saved results are redone.
+    Replace with real handwriting detection later. Bump RESULT_VERSION in
+    static/upload.js whenever these values change.
     """
-    return [{"data": "x^2 = 3x"}, {"data": "x = 3"}]
+    return [
+        {
+            "data": "x^2 = 3x",
+            "first_symbol": {
+                "left": 0.22626788,
+                "top": 0.25396825,
+                "right": 0.29388817,
+                "bottom": 0.42857143
+            },
+            "last_symbol": {
+                "left": 0.68530559,
+                "top": 0.29365079,
+                "right": 0.73602081,
+                "bottom": 0.43386243
+            }
+        },
+        {
+            "data": "x = 3",
+            "first_symbol": {
+                "left": 0.25097529,
+                "top": 0.5,
+                "right": 0.35760728,
+                "bottom": 0.68253968
+            },
+            "last_symbol": {
+                "left": 0.54746424,
+                "top": 0.51851852,
+                "right": 0.66319896,
+                "bottom": 0.6957672
+            }
+        }
+    ]
 
 
 def process_image(image: Image.Image, question: str = "") -> dict | None:

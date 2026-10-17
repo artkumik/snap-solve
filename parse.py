@@ -167,6 +167,10 @@ def parse_image_lines(lines: list, question: str = "") -> dict:
         parsed.append(expr)
         results.append({"line": i, "latex": text, "valid": error is None,
                         "error": error, "follows_from_previous": None})
+        first, last = line.get("first_symbol"), line.get("last_symbol")
+        if first and last:
+            results[-1]["bounds"] = {"left": first["left"], "right": last["right"],
+                                     "top": first["top"], "bottom": first["bottom"]}
 
     for i in range(1, len(parsed)):
         if parsed[i - 1] is not None and parsed[i] is not None:
