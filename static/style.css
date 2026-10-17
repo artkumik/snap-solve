@@ -229,9 +229,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 .saved-images { position: sticky; top: 12px; height: calc(100svh - 24px); overflow-y: auto; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--surface) 82%, transparent); }
 .saved-images[open] { width: 320px; z-index: 20; background: transparent; overflow: visible; }
 .saved-images[open].is-preview { position: fixed; top: 12px; left: 12px; z-index: 30; width: min(320px, calc(100vw - 24px)); }
-.sidebar-window { position: absolute; inset: 0 0 0 -12px; padding: 60px 12px 56px 24px; border-radius: 0 12px 12px 0; background: color-mix(in srgb, var(--surface) 97%, transparent); overflow-y: auto; clip-path: inset(0 0 0 0 round 0 12px 12px 0); transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1); }
+.sidebar-window { position: absolute; inset: 0 0 0 -12px; padding: 60px 12px 56px 24px; border-radius: 0 12px 12px 0; background: color-mix(in srgb, var(--surface) 97%, transparent); overflow-y: auto; opacity: 1; clip-path: inset(0 0 0 0 round 0 12px 12px 0); transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease; }
 .saved-images:not([open]) > .sidebar-window { display: none; clip-path: inset(0 100% 0 0 round 0 12px 12px 0); transition: none; }
-.saved-images.is-collapsing > .sidebar-window { clip-path: inset(0 100% 0 0 round 0 12px 12px 0); transition-duration: 180ms; }
+.saved-images.is-collapsing > .sidebar-window { opacity: 0; clip-path: inset(0 100% 0 0 round 0 12px 12px 0); transition-duration: 180ms; }
 .sidebar-window .sidebar-brand { position: absolute; top: 16px; left: 64px; margin: 0; color: var(--accent); font-weight: 700; letter-spacing: -0.04em; }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-window { transition: none; }
@@ -252,10 +252,24 @@ button:disabled { opacity: 0.5; cursor: default; }
 .sidebar-footer { position: absolute; right: 12px; bottom: 12px; display: flex; justify-content: flex-end; }
 #delete-all-questions { margin: 0; padding: 6px 8px; background: transparent; color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
 #delete-all-questions:hover:not(:disabled) { background: var(--inset); color: var(--text); }
+.delete-all-confirmation { position: absolute; right: 0; bottom: 100%; width: 260px; padding: 14px; border-radius: 10px; background: var(--panel); box-shadow: 0 4px 20px rgb(0 0 0 / 30%); }
+.delete-all-confirmation[hidden] { display: none; }
+.delete-all-confirmation p { margin: 0 0 12px; font-size: 0.875rem; }
+.delete-all-confirmation button { margin: 0 8px 0 0; padding: 6px 10px; font-size: 0.8rem; }
+#cancel-delete-all { background: var(--inset); color: var(--text); }
+.saved-image { --question-status-color: var(--muted); }
+.saved-image[data-status="processing"] { --question-status-color: var(--focus); }
+.saved-image[data-status="ready"] { --question-status-color: #9CE1BC; }
+.saved-image[data-status="failed"] { --question-status-color: var(--accent); }
+.question-failure { grid-column: 1 / -1; padding: 0 8px 8px; }
+.question-failure p { margin: 4px 0 8px; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.question-failure button { margin: 0; padding: 5px 10px; font-size: 0.75rem; }
 #saved-images { list-style: none; padding: 0; display: grid; gap: 16px; }
 .saved-image { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; padding: 4px; background: var(--panel); border-radius: 10px; }
 .saved-image-open { display: block; min-width: 0; width: 100%; min-height: 44px; margin: 0; padding: 8px; text-align: left; background: transparent; color: var(--text); }
 .saved-image-open span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-image.is-unread .saved-image-open { position: relative; padding-right: 24px; }
+.saved-image.is-unread .saved-image-open::after { content: ''; position: absolute; right: 8px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--question-status-color); }
 .sidebar-name-editor { display: block; min-width: 0; margin: 0; padding: 8px; background: transparent; }
 .sidebar-name-editor input { display: block; width: 100%; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: var(--inset); color: var(--text); font: inherit; line-height: inherit; }
 .sidebar-name-editor input:focus { outline: 1px solid var(--accent); outline-offset: 3px; }

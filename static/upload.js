@@ -7,6 +7,7 @@ let failedUpload = null;
 let activeFile = null;
 let activeQuestion = '';
 const sidebar = document.querySelector('.saved-images');
+const processingQuestions = new Map();
 let sidebarCloseTimer;
 const hoverSidebar = window.matchMedia('(hover: hover) and (pointer: fine)');
 sidebar.addEventListener('pointerenter', () => {
@@ -177,6 +178,10 @@ document.getElementById('problem-editor').addEventListener('submit', async event
 });
 
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !document.getElementById('delete-all-confirmation').hidden) {
+    document.getElementById('cancel-delete-all').click();
+    return;
+  }
   if (event.key === 'Escape' && !document.getElementById('question-name-editor').hidden) {
     closeNameEditor();
     document.getElementById('rename-question').focus();
@@ -209,10 +214,27 @@ document.getElementById('retry-processing').addEventListener('click', () => {
   input.form.requestSubmit();
 });
 
+async function markQuestionOpened(imageId) {
+  await imageStore('readwrite', store => {
+    const request = store.get(imageId);
+    request.onsuccess = () => {
+      if (request.result) store.put({ ...request.result, opened: true });
+    };
+    return request;
+  });
+}
+
 function setActiveQuestion(imageId) {
   if (activeImageId !== imageId) closeNameEditor();
   activeImageId = imageId;
   const current = [...savedImages.children].find(item => Number(item.dataset.imageId) === imageId);
+  if (current?.classList.contains('is-unread')) {
+    current.classList.remove('is-unread');
+    current.querySelector('.saved-image-open')?.setAttribute('aria-label', current.dataset.title);
+    markQuestionOpened(imageId).catch(() => {
+      storageStatus.textContent = 'Could not save the opened status. The unread dot may return after reloading.';
+    });
+  }
   document.getElementById('question-title').textContent = current?.dataset.title || 'Untitled question';
   document.getElementById('rename-question').disabled = imageId === null;
   savedImages.querySelectorAll('.saved-image').forEach(item => {
@@ -557,18 +579,40 @@ async function deleteSavedImage(imageId) {
   if (imageId === activeImageId) showHome();
 }
 
-document.getElementById('delete-all-questions').addEventListener('click', async event => {
+document.getElementById('delete-all-questions').addEventListener('click', () => {
+  document.getElementById('delete-all-confirmation').hidden = false;
+  document.getElementById('cancel-delete-all').focus();
+});
+document.getElementById('cancel-delete-all').addEventListener('click', () => {
+  document.getElementById('delete-all-confirmation').hidden = true;
+  document.getElementById('delete-all-questions').focus();
+});
+document.getElementById('confirm-delete-all').addEventListener('click', async event => {
   const button = event.currentTarget;
   button.disabled = true;
   try {
     await imageStore('readwrite', store => store.clear());
+    document.getElementById('delete-all-confirmation').hidden = true;
     showHome();
     await showSavedImages();
   } catch {
     storageStatus.textContent = 'Could not delete all questions. Please try again.';
-    button.disabled = !savedImages.children.length;
+  } finally {
+    button.disabled = false;
   }
 });
+
+async function saveProcessingStatus(id, question, status, error = '') {
+  if (id === null) return;
+  await imageStore('readwrite', store => {
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const record = request.result;
+      if (record && (record.question || '') === question) store.put({ ...record, status, processingError: error });
+    };
+    return request;
+  });
+}
 
 // Adds the server's result to an already-saved image record.
 async function saveResult(id, result, question = '') {
@@ -580,6 +624,8 @@ async function saveResult(id, result, question = '') {
       if (!record || (record.question || '') !== question) return;
       record.result = result;
       record.resultVersion = RESULT_VERSION;
+      record.status = 'ready';
+      delete record.processingError;
       store.put(record);
     };
     return request;
@@ -593,6 +639,7 @@ function updateSelection(input) {
 async function showSavedImages() {
   const images = await imageStore('readonly', store => store.getAll());
   document.getElementById('delete-all-questions').disabled = images.length === 0;
+  if (!images.length) document.getElementById('delete-all-confirmation').hidden = true;
   savedImages.replaceChildren();
   storageStatus.textContent = '';
 
@@ -600,6 +647,7 @@ async function showSavedImages() {
     const title = questionTitle(image);
     const item = document.createElement('li');
     item.className = 'saved-image';
+    item.classList.toggle('is-unread', image.opened === false);
     item.dataset.imageId = image.id;
     item.dataset.title = title;
     const notice = document.createElement('p');
@@ -623,7 +671,15 @@ async function showSavedImages() {
     const use = document.createElement('button');
     use.type = 'button';
     use.className = 'saved-image-open';
+    if (image.opened === false) use.setAttribute('aria-label', `${title}, unopened`);
     use.append(name);
+    const state = image.status || (hasSavedResult(image) ? 'ready' : 'failed');
+    item.dataset.status = state;
+    const statusLabel = { queued: 'Queued', processing: 'Processing', failed: 'Failed', ready: 'Ready' }[state] || 'Failed';
+    if (image.opened === false) {
+      use.setAttribute('aria-label', `${title}, unopened, ${statusLabel.toLowerCase()}`);
+      use.title = `${title} — ${statusLabel}`;
+    }
     if (Number.isFinite(image.savedAt)) {
       const created = document.createElement('time');
       const date = new Date(image.savedAt);
@@ -636,12 +692,18 @@ async function showSavedImages() {
       created.title = `Created ${date.toLocaleString()}`;
       use.append(created);
     }
-    use.title = title;
+    if (image.opened !== false) use.title = title;
     use.addEventListener('click', () => {
       menu.open = false;
       setActiveQuestion(image.id);
       showDeleteNotice(null, '');
       storageStatus.textContent = '';
+      if (processingQuestions.has(image.id)) {
+        latestRequest++;
+        showUploadPreview(image.file, image.question || '');
+        document.getElementById('process-output').textContent = 'Processing…';
+        return;
+      }
       if (hasSavedResult(image)) {
         // Already processed: show the saved result without asking the server again.
         latestRequest++; // ignore any upload still in progress
@@ -736,6 +798,22 @@ async function showSavedImages() {
     actions.append(rename, remove);
     menu.append(summary, actions);
     item.append(use, menu, notice);
+    if (state === 'failed') {
+      const failure = document.createElement('div');
+      failure.className = 'question-failure';
+      const message = document.createElement('p');
+      message.textContent = image.processingError || 'Processing did not finish. Try again.';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.textContent = 'Retry';
+      retry.setAttribute('aria-label', `Retry ${title}`);
+      retry.addEventListener('click', () => {
+        retry.disabled = true;
+        processUpload(document.getElementById('upload-image').form, image.file, image.id, image.question || '', activeImageId === image.id);
+      });
+      failure.append(message, retry);
+      item.append(failure);
+    }
     savedImages.append(item);
   }
   setActiveQuestion(activeImageId);
@@ -746,108 +824,160 @@ document.querySelectorAll('.image-picker').forEach(button => {
   updateSelection(input);
   button.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
+    const picked = Array.from(input.files);
+    if (!picked.length) return;
     document.getElementById('launch-feedback').textContent = '';
-    const picked = input.files[0];
+    input.value = '';
     updateSelection(input);
-    if (!picked) return;
-    const rejectFile = () => {
-      input.value = '';
-      updateSelection(input);
-      document.getElementById('launch-feedback').textContent = 'Choose a JPEG, PNG, or WebP image, 10 MB or smaller.';
-    };
-    if (!ALLOWED_TYPES.includes(picked.type)) return rejectFile();
-    // Shrink before the size check, so a large phone photo still works once it's resized.
-    const file = await shrinkImage(picked);
-    if (file.size > MAX_UPLOAD_BYTES) return rejectFile();
-    if (file !== picked) {
-      const transfer = new DataTransfer();
-      transfer.items.add(file);
-      input.files = transfer.files; // the submit handler uploads whatever is in the input
-      updateSelection(input);
-    }
-    // Save first so the upload knows which saved record its result belongs to.
+    button.disabled = true;
+    const rejected = [];
+    const uploads = [];
     try {
-      const id = await imageStore('readwrite', store => store.add({ file, savedAt: Date.now() }));
-      input.form.dataset.imageId = id;
-      await showSavedImages();
-      keepStoragePersistent();
-    } catch {
-      storageStatus.textContent = 'Could not save locally. Browser storage may be unavailable or full. The image will still be uploaded.';
+      for (const original of picked) {
+        if (!ALLOWED_TYPES.includes(original.type)) {
+          rejected.push(original.name);
+          continue;
+        }
+        const file = await shrinkImage(original);
+        if (file.size > MAX_UPLOAD_BYTES) {
+          rejected.push(original.name);
+          continue;
+        }
+        let imageId = null;
+        try {
+          imageId = await imageStore('readwrite', store => store.add({ file, savedAt: Date.now(), opened: false, status: 'queued' }));
+        } catch {
+          storageStatus.textContent = 'Could not save locally. The image will still be uploaded.';
+        }
+        uploads.push({ file, imageId });
+      }
+      await showSavedImages().catch(() => {});
+      if (uploads.length) keepStoragePersistent();
+      // Each file gets its own question and request; keep later uploads in the background.
+      for (const [index, upload] of uploads.entries()) {
+        button.disabled = true;
+        await processUpload(input.form, upload.file, upload.imageId, '', index === 0);
+      }
+    } finally {
+      button.disabled = false;
+      if (rejected.length) {
+        const message = `Skipped ${rejected.join(', ')}. Each image must be JPEG, PNG, or WebP and 10 MB or smaller after resizing.`;
+        document.getElementById('launch-feedback').textContent = message;
+        if (uploads.length) {
+          const error = document.getElementById('upload-error');
+          error.textContent = message;
+          error.hidden = false;
+        }
+      }
     }
-    input.form.requestSubmit();
   });
 });
 
-showSavedImages().catch(() => {
+async function restoreSavedQuestions() {
+  // Requests do not survive a reload. Preserve their images and offer a retry.
+  await imageStore('readwrite', store => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      for (const record of request.result) {
+        if (record.status === 'queued' || record.status === 'processing') {
+          store.put({ ...record, status: 'failed', processingError: 'Upload interrupted. Please retry.' });
+        }
+      }
+    };
+    return request;
+  });
+  await showSavedImages();
+}
+const restoredQuestions = restoreSavedQuestions();
+restoredQuestions.catch(() => {
   storageStatus.textContent = 'Browser storage is unavailable. You can still upload images.';
 });
 
 document.querySelectorAll('.panel form').forEach(form => {
-  form.addEventListener('submit', async event => {
+  form.addEventListener('submit', event => {
     event.preventDefault();
-    const input = form.querySelector('[type="file"]');
-    const file = input.files[0];
-    // dataset values are strings, but IndexedDB ids are numbers.
+    const file = form.querySelector('[type="file"]').files[0];
     const imageId = form.dataset.imageId ? Number(form.dataset.imageId) : null;
     const question = form.dataset.question || '';
     delete form.dataset.imageId;
     delete form.dataset.question;
-    if (!file) return;
-    setActiveQuestion(imageId);
-    showDeleteNotice(null, '');
-    const requestId = ++latestRequest;
-    const isLatest = () => requestId === latestRequest;
-    const button = form.querySelector('.image-picker');
-    const errorMessage = document.getElementById('upload-error');
-    button.disabled = true;
+    if (file) processUpload(form, file, imageId, question);
+  });
+});
+
+async function processUpload(form, file, imageId = null, question = '', display = true) {
+  await restoredQuestions.catch(() => {});
+  if (imageId !== null) {
+    if (processingQuestions.get(imageId) === question) return;
+    const record = await imageStore('readonly', store => store.get(imageId)).catch(() => null);
+    if (!record || (record.question || '') !== question) return;
+    if (!display && record.status === 'ready' && hasSavedResult(record)) return;
+    // Recheck after the asynchronous read to prevent a duplicate queued request.
+    if (processingQuestions.get(imageId) === question) return;
+    processingQuestions.set(imageId, question);
+  }
+  const input = form.querySelector('[type="file"]');
+  if (display) setActiveQuestion(imageId);
+  showDeleteNotice(null, '');
+  const requestId = display ? ++latestRequest : latestRequest;
+  const isLatest = () => (display && requestId === latestRequest) || (imageId !== null && activeImageId === imageId && activeQuestion === question);
+  const button = form.querySelector('.image-picker');
+  const errorMessage = document.getElementById('upload-error');
+  button.disabled = true;
+  if (display) {
     errorMessage.hidden = true;
     showUploadPreview(file, question);
     showVideos([]); // the previous problem's videos don't belong to this one
     document.getElementById('process-output').textContent = 'Processing…';
-    try {
-      const url = new URL(form.action);
-      if (question) url.searchParams.set('question', question);
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-        signal: AbortSignal.timeout(90_000), // stop waiting after 90 s
-      });
-      // Errors from a hosting proxy (e.g. 502) are HTML pages, not JSON.
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || `Image processing failed (error ${response.status}).`);
-      }
-      if (isLatest()) {
-        showResult(data.result);
-        if (data.result?.context_error) {
-          failedUpload = { file, imageId, question };
-          document.getElementById('retry-processing').hidden = false;
-        }
-        input.value = '';
-        updateSelection(input);
-      }
-      // Save the result even if the user moved on, so it's ready next time.
-      // Only save complete results: if Gemini didn't answer (e.g. missing key), retry next time.
-      if (imageId !== null && data.result != null && data.result.context != null) {
-        try {
-          await saveResult(imageId, data.result, question);
-          await showSavedImages();
-        } catch {
-          storageStatus.textContent = 'Could not save the result locally. It will be processed again next time.';
-        }
-      }
-    } catch (error) {
-      if (!isLatest()) return;
-      document.getElementById('process-output').textContent = '';
-      errorMessage.textContent = error.name === 'TimeoutError'
-        ? 'Processing took too long. Please try again.'
-        : error.message || 'Could not process the image. Please try again.';
-      errorMessage.hidden = false;
-      failedUpload = { file, imageId, question };
-      document.getElementById('retry-processing').hidden = false;
-    } finally {
-      button.disabled = false;
+  }
+  try {
+    await saveProcessingStatus(imageId, question, 'processing').catch(() => {});
+    await showSavedImages().catch(() => {});
+    const url = new URL(form.action);
+    if (question) url.searchParams.set('question', question);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+      signal: AbortSignal.timeout(90_000), // stop waiting after 90 s
+    });
+    // Errors from a hosting proxy (e.g. 502) are HTML pages, not JSON.
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || `Image processing failed (error ${response.status}).`);
     }
-  });
-});
+    if (!data.result || !data.result.context || data.result.context_error) {
+      throw new Error(data.result?.context_error || 'No processing result was returned. Please retry.');
+    }
+    if (isLatest()) {
+      showResult(data.result);
+      input.value = '';
+      updateSelection(input);
+    }
+    // Save the result even if the user moved on, so it's ready next time.
+    // Only save complete results: if Gemini didn't answer (e.g. missing key), retry next time.
+    if (imageId !== null && data.result != null && data.result.context != null) {
+      try {
+        await saveResult(imageId, data.result, question);
+        await showSavedImages();
+      } catch {
+        storageStatus.textContent = 'Could not save the result locally. It will be processed again next time.';
+      }
+    }
+  } catch (error) {
+    const message = error.name === 'TimeoutError'
+      ? 'Processing took too long. Please try again.'
+      : error.message || 'Could not process the image. Please try again.';
+    await saveProcessingStatus(imageId, question, 'failed', message).catch(() => {});
+    await showSavedImages().catch(() => {});
+    if (!isLatest()) return;
+    document.getElementById('process-output').textContent = '';
+    errorMessage.textContent = message;
+    errorMessage.hidden = false;
+    failedUpload = { file, imageId, question };
+    document.getElementById('retry-processing').hidden = false;
+  } finally {
+    if (processingQuestions.get(imageId) === question) processingQuestions.delete(imageId);
+    button.disabled = false;
+  }
+}

@@ -18,7 +18,7 @@
               <span class="action-icon" style="--icon: url('{{ url_for('static', path='/icons/upload.png') }}')" aria-hidden="true"></span>
               Upload
             </button>
-            <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
+            <input type="file" id="upload-image" name="image" multiple accept="image/jpeg,image/png,image/webp" hidden>
             <p class="selected-file" aria-live="polite">No image selected</p>
           </form>
           <form action="/upload" method="post" enctype="multipart/form-data">
@@ -109,6 +109,11 @@
       <p id="storage-status" role="status"></p>
       <ul id="saved-images"></ul>
       <div class="sidebar-footer">
+        <div id="delete-all-confirmation" class="delete-all-confirmation" hidden>
+          <p>Delete all questions and their saved images?</p>
+          <button id="confirm-delete-all" type="button">Delete all</button>
+          <button id="cancel-delete-all" type="button">Cancel</button>
+        </div>
         <button id="delete-all-questions" type="button" disabled>Delete all</button>
       </div>
       </div>
