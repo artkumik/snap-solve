@@ -8,3 +8,4 @@ sympy
 antlr4-python3-runtime==4.11.*
 torch 
 torchvision --index-url https://download.pytorch.org/whl/cu121
+texteller
