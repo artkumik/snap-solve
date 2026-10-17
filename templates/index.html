@@ -3,19 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SNAP-solver</title>
+  <title>snap solve</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
-  <h1>SNAP-solver</h1>
-
-  <img src="{{ url_for('static', path='/images/intelligent.png') }}" alt="A descriptive sentence about the image">
-
-  <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
-    <label for="image">Choose an image</label>
-    <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp" aria-describedby="upload-help" required>
-    <p id="upload-help">JPEG, PNG, or WebP. Maximum 10 MB.</p>
-    <button type="submit">Upload</button>
-  </form>
-
+  <main>
+    <h1>snap solve</h1>
+    <div class="panel">
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <button class="image-picker" type="button" aria-controls="upload-image">
+          <img class="action-icon" src="{{ url_for('static', path='/icons/upload.png') }}" alt="">
+          Upload image
+        </button>
+        <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
+        <p class="selected-file" aria-live="polite">No image selected</p>
+        <button type="submit">Continue</button>
+      </form>
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <button class="image-picker" type="button" aria-controls="take-image">
+          <img class="action-icon" src="{{ url_for('static', path='/icons/camera.png') }}" alt="">
+          Take image
+        </button>
+        <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+        <p class="selected-file" aria-live="polite">No image selected</p>
+        <button type="submit">Continue</button>
+      </form>
+    </div>
+  </main>
+  <script src="{{ url_for('static', path='/upload.js') }}"></script>
 </body>
 </html>
