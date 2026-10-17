@@ -227,3 +227,9 @@ __marimo__/
 
 # User-uploaded images
 uploads/
+
+# Local cropper images; keep the tool and empty folder placeholders tracked.
+/equation_cropper/input/*
+!/equation_cropper/input/.gitkeep
+/equation_cropper/output/*
+!/equation_cropper/output/.gitkeep
