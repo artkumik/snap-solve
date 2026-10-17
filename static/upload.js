@@ -106,34 +106,34 @@ showSavedImages().catch(() => {
   storageStatus.textContent = 'Browser storage is unavailable. You can still upload images.';
 });
 
-let resultPreviewURL;
+let uploadPreviewURL;
 document.querySelectorAll('.panel form').forEach(form => {
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const file = form.querySelector('[type="file"]').files[0];
     if (!file) return;
     const submit = form.querySelector('[type="submit"]');
-    const status = document.getElementById('processing-status');
-    const result = document.getElementById('processing-result');
+    const errorMessage = document.getElementById('upload-error');
     submit.disabled = true;
-    result.hidden = true;
-    status.textContent = 'Processing image…';
+    errorMessage.hidden = true;
     try {
       const response = await fetch(form.action, {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Image processing failed.');
-      if (resultPreviewURL) URL.revokeObjectURL(resultPreviewURL);
-      resultPreviewURL = URL.createObjectURL(file);
-      document.getElementById('result-preview').src = resultPreviewURL;
-      document.getElementById('result-text').textContent = JSON.stringify(data.result);
-      result.hidden = false;
-      status.textContent = 'Image processed.';
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Image processing failed.');
+      }
+      const preview = document.getElementById('upload-preview');
+      if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
+      uploadPreviewURL = URL.createObjectURL(file);
+      preview.src = uploadPreviewURL;
+      preview.hidden = false;
     } catch (error) {
-      status.textContent = error.message || 'Could not process the image. Please try again.';
+      errorMessage.textContent = error.message || 'Could not process the image. Please try again.';
+      errorMessage.hidden = false;
     } finally {
       submit.disabled = false;
     }

@@ -72,6 +72,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 .uploaded-image { max-width: 100%; height: auto; }
+#upload-preview { margin-top: 24px; border-radius: 10px; }
 
 .saved-images { margin-top: 32px; }
 .saved-images h2 { margin-bottom: 8px; }
