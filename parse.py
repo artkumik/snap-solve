@@ -22,7 +22,7 @@ class ProblemContext(BaseModel):
     problem_latex: str
 
 def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
-    """Ask Gemini what problem the student is solving. Returns None if that fails."""
+    """Ask Gemini what problem the student is solving."""
     prompt = (
         "These are lines of a student's handwritten math work, transcribed to LaTeX, "
         "one per line. Identify what problem they are solving. Do not solve it.\n"
@@ -34,22 +34,32 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
     prompt += lines_text
 
     try:
-        # Give up after 30 s (and don't retry) so a slow or stuck request can't hang the upload.
+        # Stay within the browser's 90-second upload timeout.
         client = genai.Client(
             api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
             http_options=types.HttpOptions(
-                timeout=30_000, retry_options=types.HttpRetryOptions(attempts=1)),
+                timeout=60_000, retry_options=types.HttpRetryOptions(attempts=1)),
         )
         response = client.models.generate_content(
-            model="gemini-3.8-flash",
+            model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
             contents=prompt,
-            config={"response_mime_type": "application/json", "response_schema": ProblemContext},
+            config={"response_mime_type": "application/json", "response_schema": ProblemContext,
+                    "thinking_config": types.ThinkingConfig(thinking_level="low")},
         )
         return response.parsed
     except Exception as exc:
-        # Missing API key, network error, bad model name, ... The line checks still run without it.
-        logging.getLogger(__name__).warning("Gemini context failed: %r", exc)
-        return None
+        code = getattr(exc, "code", None)
+        messages = {
+            400: "Gemini rejected the request. Check the API key and model configuration.",
+            401: "Gemini authentication failed. Check GEMINI_API_KEY in .env.",
+            403: "Gemini access denied. Check your API key permissions.",
+            404: "The configured Gemini model is unavailable.",
+            429: "Gemini quota or rate limit reached. Check usage and billing, then retry.",
+            504: "Gemini timed out. Open this question again to retry.",
+        }
+        message = messages.get(code, "Could not get context from Gemini. Check the key and connection, then retry.")
+        logging.getLogger(__name__).warning("Gemini context failed (%s, status %s)", type(exc).__name__, code)
+        raise RuntimeError(message) from exc
 
 def check_line(latex: str):
     """Returns (sympy_object, None) if valid, or (None, error_message) if not."""
@@ -94,7 +104,14 @@ def reaches_goal(final, context: ProblemContext | None, var: Symbol):
         return None
 
 def parse_image_lines(lines: list, question: str = "") -> dict:
-    context = get_context(combine_lines(lines), question)
+    context_error = None
+    try:
+        context = get_context(combine_lines(lines), question)
+        if context is None:
+            context_error = "Gemini returned no context. Open this question again to retry."
+    except RuntimeError as exc:
+        context = None
+        context_error = str(exc)
     var = Symbol(context.variables[0]) if context and context.variables else Symbol("x")
 
     results, parsed = [], []
@@ -113,7 +130,10 @@ def parse_image_lines(lines: list, question: str = "") -> dict:
     if parsed and parsed[-1] is not None:
         final_correct = reaches_goal(parsed[-1], context, var)
 
-    return {"context": context.model_dump() if context else None, "lines": results, "final_correct": final_correct}
+    result = {"context": context.model_dump() if context else None, "lines": results, "final_correct": final_correct}
+    if context_error:
+        result["context_error"] = context_error
+    return result
 
 def combine_lines(lines: list) -> str:
     texts = [line.get("data", "") for line in lines]
