@@ -1,6 +1,17 @@
 const storageStatus = document.getElementById('storage-status');
 const savedImages = document.getElementById('saved-images');
 const previewURLs = [];
+let uploadPreviewURL;
+
+function showUploadPreview(file) {
+  const preview = document.getElementById('upload-preview');
+  preview.onload = null;
+  if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
+  uploadPreviewURL = URL.createObjectURL(file);
+  preview.src = uploadPreviewURL;
+  preview.hidden = false;
+  return preview;
+}
 
 const database = new Promise((resolve, reject) => {
   const request = indexedDB.open('snap-solve', 1);
@@ -54,7 +65,9 @@ async function showSavedImages() {
       transfer.items.add(image.file);
       input.files = transfer.files;
       updateSelection(input);
-      input.form.querySelector('[type="submit"]').focus();
+      input.form.querySelector('[type="submit"]').focus({ preventScroll: true });
+      const preview = showUploadPreview(image.file);
+      preview.onload = () => preview.scrollIntoView({ block: 'start' });
     });
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -106,7 +119,6 @@ showSavedImages().catch(() => {
   storageStatus.textContent = 'Browser storage is unavailable. You can still upload images.';
 });
 
-let uploadPreviewURL;
 document.querySelectorAll('.panel form').forEach(form => {
   form.addEventListener('submit', async event => {
     event.preventDefault();
@@ -126,11 +138,7 @@ document.querySelectorAll('.panel form').forEach(form => {
         const data = await response.json();
         throw new Error(data.detail || 'Image processing failed.');
       }
-      const preview = document.getElementById('upload-preview');
-      if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
-      uploadPreviewURL = URL.createObjectURL(file);
-      preview.src = uploadPreviewURL;
-      preview.hidden = false;
+      showUploadPreview(file);
     } catch (error) {
       errorMessage.textContent = error.message || 'Could not process the image. Please try again.';
       errorMessage.hidden = false;
