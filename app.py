@@ -28,7 +28,10 @@ processing_slots = asyncio.Semaphore(MAX_CONCURRENT)
 
 @app.get("/")
 def index(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    asset_version = max((BASE_DIR / "static" / name).stat().st_mtime_ns
+                        for name in ("style.css", "upload.js", "backdrop.js", "resize.js"))
+    return templates.TemplateResponse(request=request, name="index.html",
+                                      context={"asset_version": asset_version})
 
 
 def load_image(data: bytes) -> Image.Image:

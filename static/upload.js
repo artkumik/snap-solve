@@ -258,7 +258,7 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 8; // 8: explain specific solutions lost or introduced by a step
+const RESULT_VERSION = 10; // 10: explicit processing success with detected line bounds
 
 function isIncorrect(line) {
   return line.valid === false || line.follows_from_previous === false || !!line.error;
@@ -290,7 +290,7 @@ function showLineBoxes(lines) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'line-box';
-    if (!isIncorrect(line)) button.classList.add('is-correct');
+    if (!isIncorrect(line)) button.classList.add(line.valid === true ? 'is-correct' : 'is-unchecked');
     button.dataset.step = index;
     button.setAttribute('aria-label', `Show details for line ${line.line ?? index + 1}`);
     button.setAttribute('aria-controls', `solution-step-${index}`);
@@ -320,7 +320,7 @@ function showResult(result) {
   if (typeof result === 'string') output.textContent = result;
   const context = result?.context;
   document.getElementById('problem-summary').hidden = false;
-  document.getElementById('problem-label').textContent = activeQuestion ? 'Your problem' : 'Inferred problem';
+  document.getElementById('problem-label').textContent = activeQuestion ? 'Your problem' : 'Problem';
   document.getElementById('problem-title').textContent = activeQuestion || context?.goal || context?.task || 'Add the original problem';
   if (result?.context_error) {
     const warning = document.createElement('p');
@@ -357,7 +357,7 @@ function showResult(result) {
         message.className = 'line-error';
         message.textContent = error;
         item.append(message);
-      } else if (index > 0 && line.follows_from_previous == null) {
+      } else if (result.mode !== 'line_detection' && index > 0 && line.follows_from_previous == null) {
         const message = document.createElement('p');
         message.className = 'line-note';
         message.textContent = 'The step from the previous line could not be verified.';
@@ -369,8 +369,10 @@ function showResult(result) {
     if (result.lines.length) {
       const hint = document.createElement('p');
       hint.className = 'selection-hint';
-      hint.textContent = 'Select a step on your work to see feedback.';
+      hint.textContent = result.mode === 'line_detection' ? 'Select a highlighted line.' : 'Select a step on your work to see feedback.';
       output.append(hint);
+    } else if (result.mode === 'line_detection') {
+      output.textContent = 'No lines detected.';
     }
   }
   showVideos(result?.videos, result?.context?.video_query);
@@ -430,7 +432,10 @@ function showVideos(videos, query) {
 }
 
 function hasSavedResult(image) {
-  return image.result != null && !image.result.context_error && image.resultVersion === RESULT_VERSION;
+  return image.result?.success === true && image.result.mode === 'line_detection'
+    && Array.isArray(image.result.lines)
+    && !image.result.context_error
+    && image.resultVersion === RESULT_VERSION;
 }
 
 function questionTitle(image) {
@@ -495,8 +500,8 @@ function showUploadPreview(file, question = '') {
   activeQuestion = question;
   closeProblemEditor();
   document.getElementById('problem-summary').hidden = false;
-  document.getElementById('problem-label').textContent = question ? 'Your problem' : 'Inferred problem';
-  document.getElementById('problem-title').textContent = question || 'Identifying the problem…';
+  document.getElementById('problem-label').textContent = question ? 'Your problem' : 'Problem';
+  document.getElementById('problem-title').textContent = question || 'Add the original problem';
   failedUpload = null;
   document.getElementById('retry-processing').hidden = true;
   document.getElementById('line-overlays').replaceChildren();
@@ -950,7 +955,7 @@ async function processUpload(form, file, imageId = null, question = '', display 
     if (!response.ok) {
       throw new Error(data.detail || `Image processing failed (error ${response.status}).`);
     }
-    if (!data.result || !data.result.context || data.result.context_error) {
+    if (data.result?.success !== true || data.result.mode !== 'line_detection' || !Array.isArray(data.result.lines) || data.result.context_error) {
       throw new Error(data.result?.context_error || 'No processing result was returned. Please retry.');
     }
     if (isLatest()) {
@@ -959,8 +964,7 @@ async function processUpload(form, file, imageId = null, question = '', display 
       updateSelection(input);
     }
     // Save the result even if the user moved on, so it's ready next time.
-    // Only save complete results: if Gemini didn't answer (e.g. missing key), retry next time.
-    if (imageId !== null && data.result != null && data.result.context != null) {
+    if (imageId !== null) {
       try {
         await saveResult(imageId, data.result, question);
         await showSavedImages();
