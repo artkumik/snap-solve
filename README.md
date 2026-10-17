@@ -11,6 +11,15 @@ website outline
 to do list
 
     - figure out how the images are stored json
+		-[
+          {
+            "image_id": "image_name",
+            "lines": [
+              { "data": "..." },
+              { "data": "..." }
+            ]
+          }
+        ]
     - process image asyncronously (loading bar)
     - have upload for the question (context for solution)
     - 
