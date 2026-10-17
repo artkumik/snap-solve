@@ -35,7 +35,7 @@ window.fetch = () => new Promise(() => {});
       assert(getComputedStyle(document.getElementById('image-result')).display === 'grid', 'Result layout not visible');
       await preview.decode();
       assert(preview.naturalWidth === 1, id + ': preview did not load');
-      assert(document.getElementById('process-output').textContent === '', 'Output should remain blank while pending');
+      assert(document.getElementById('process-output').textContent === 'Processing…', 'Output should say Processing… while pending');
     }
     savedId = await imageStore('readwrite', store => store.add({file, savedAt: Date.now()}));
     await showSavedImages();

@@ -36,7 +36,7 @@ class UploadTests(unittest.TestCase):
         with Image.new("RGB", (2, 2)) as image:
             image.save(data, format="PNG")
 
-        def process(image):
+        def process(image, question=""):
             self.assertNotEqual(threading.get_ident(), request_thread)
             self.assertIsInstance(image, Image.Image)
             self.assertEqual(image.size, (2, 2))
@@ -55,6 +55,31 @@ class UploadTests(unittest.TestCase):
                 status, _ = asyncio.run(post_image(data))
                 self.assertEqual(status, expected)
                 processor.assert_not_called()
+
+    def test_huge_dimensions_are_rejected_before_decoding(self):
+        # A small file that would decode to a gigantic image must not reach the processor.
+        data = BytesIO()
+        with Image.new("L", (6000, 6000), 255) as image:
+            image.save(data, format="PNG", optimize=True)
+        with patch("app.process_image") as processor:
+            status, _ = asyncio.run(post_image(data.getvalue()))
+        self.assertEqual(status, 413)
+        processor.assert_not_called()
+
+    def test_large_photos_are_shrunk_before_processing(self):
+        data = BytesIO()
+        with Image.new("RGB", (4000, 3000), "white") as image:
+            image.save(data, format="JPEG")
+        sizes = []
+
+        def process(image, question=""):
+            sizes.append(image.size)
+            return None
+
+        with patch("app.process_image", side_effect=process):
+            status, _ = asyncio.run(post_image(data.getvalue()))
+        self.assertEqual(status, 200)
+        self.assertEqual(sizes, [(2048, 1536)])
 
 
 if __name__ == "__main__":
