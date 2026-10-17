@@ -1,6 +1,7 @@
 const storageStatus = document.getElementById('storage-status');
 const savedImages = document.getElementById('saved-images');
 let uploadPreviewURL;
+let activeImageId = null;
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
 const RESULT_VERSION = 1;
 
@@ -76,6 +77,8 @@ function showUploadPreview(file) {
 }
 
 document.getElementById('new-image').addEventListener('click', () => {
+  activeImageId = null;
+  storageStatus.textContent = '';
   latestRequest++; // ignore any upload still in progress
   document.getElementById('image-result').hidden = true;
   document.getElementById('video-recommendations').hidden = true;
@@ -112,6 +115,15 @@ async function imageStore(mode, action) {
     transaction.oncomplete = () => resolve(request.result);
     transaction.onabort = () => reject(transaction.error);
     transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+function deleteSavedImage(imageId) {
+  return imageStore('readwrite', store => {
+    if (imageId === activeImageId) {
+      throw new Error('This question is currently open. Open another question or start a new problem before deleting it.');
+    }
+    return store.delete(imageId);
   });
 }
 
@@ -156,6 +168,8 @@ async function showSavedImages() {
     use.title = image.file.name;
     use.addEventListener('click', () => {
       menu.open = false;
+      activeImageId = image.id;
+      storageStatus.textContent = '';
       if (hasSavedResult(image)) {
         // Already processed: show the saved result without asking the server again.
         latestRequest++; // ignore any upload still in progress
@@ -179,10 +193,13 @@ async function showSavedImages() {
     remove.setAttribute('aria-label', `Delete ${image.file.name}`);
     remove.addEventListener('click', async () => {
       try {
-        await imageStore('readwrite', store => store.delete(image.id));
+        await deleteSavedImage(image.id);
         await showSavedImages();
-      } catch {
-        storageStatus.textContent = 'Could not delete this image. Please try again.';
+      } catch (error) {
+        storageStatus.textContent = image.id === activeImageId
+          ? error.message
+          : 'Could not delete this image. Please try again.';
+        menu.open = false;
       }
     });
     actions.append(remove);
@@ -241,6 +258,7 @@ document.querySelectorAll('.panel form').forEach(form => {
     const imageId = form.dataset.imageId ? Number(form.dataset.imageId) : null;
     delete form.dataset.imageId;
     if (!file) return;
+    activeImageId = imageId;
     const requestId = ++latestRequest;
     const isLatest = () => requestId === latestRequest;
     const button = form.querySelector('.image-picker');

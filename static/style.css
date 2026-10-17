@@ -173,6 +173,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .image-menu-actions button:hover { background: var(--inset); }
 
 .saved-images > p { color: var(--muted); line-height: 1.6; }
+#storage-status { margin: 12px 0; padding: 12px 14px; border-radius: 10px; background: var(--inset); color: var(--text); font-size: 0.875rem; line-height: 1.6; overflow-wrap: anywhere; }
 #storage-status:empty { display: none; }
 #upload-error { color: var(--focus); }
 a { color: var(--focus); }
