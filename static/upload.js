@@ -3,13 +3,223 @@ const savedImages = document.getElementById('saved-images');
 let uploadPreviewURL;
 let activeImageId = null;
 let deleteNotice = null;
+let failedUpload = null;
+let activeFile = null;
+let activeQuestion = '';
+const sidebar = document.querySelector('.saved-images');
+let sidebarCloseTimer;
+const hoverSidebar = window.matchMedia('(hover: hover) and (pointer: fine)');
+sidebar.addEventListener('pointerenter', () => {
+  if (!hoverSidebar.matches) return;
+  clearTimeout(sidebarCloseTimer);
+  sidebar.classList.remove('is-collapsing');
+  if (!sidebar.open) {
+    sidebar.classList.add('is-preview', 'is-collapsing');
+    sidebar.open = true;
+    // Paint the collapsed edge first so hover expansion always transitions.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (sidebar.classList.contains('is-preview')) sidebar.classList.remove('is-collapsing');
+    }));
+  }
+});
+sidebar.addEventListener('pointerleave', () => {
+  if (!sidebar.classList.contains('is-preview')) return;
+  clearTimeout(sidebarCloseTimer);
+  sidebarCloseTimer = setTimeout(() => {
+    sidebar.classList.add('is-collapsing');
+    sidebarCloseTimer = setTimeout(() => {
+      sidebar.open = false;
+      sidebar.classList.remove('is-preview', 'is-collapsing');
+    }, 180);
+  }, 100);
+});
+sidebar.addEventListener('click', event => {
+  if (!sidebar.classList.contains('is-preview')) return;
+  // A preview already has open=true; keep the summary click from closing it.
+  if (event.target.closest('summary') === sidebar.querySelector(':scope > summary')) event.preventDefault();
+  clearTimeout(sidebarCloseTimer);
+  sidebar.classList.remove('is-preview', 'is-collapsing');
+});
+sidebar.addEventListener('toggle', () => {
+  if (!sidebar.open) {
+    clearTimeout(sidebarCloseTimer);
+    sidebar.classList.remove('is-preview', 'is-collapsing');
+  }
+});
+
+function closeNameEditor() {
+  document.getElementById('question-name-editor').hidden = true;
+  document.getElementById('question-title').hidden = false;
+  document.getElementById('rename-question').setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('rename-question').addEventListener('click', () => {
+  if (!document.getElementById('question-name-editor').hidden) return;
+  const field = document.getElementById('question-name');
+  field.value = document.getElementById('question-title').textContent;
+  document.getElementById('question-name-error').hidden = true;
+  document.getElementById('question-name-editor').hidden = false;
+  document.getElementById('question-title').hidden = true;
+  document.getElementById('rename-question').setAttribute('aria-expanded', 'true');
+  field.focus();
+  field.select();
+});
+document.getElementById('question-name').addEventListener('blur', () => {
+  const editor = document.getElementById('question-name-editor');
+  if (!editor.hidden) editor.requestSubmit();
+});
+document.getElementById('question-name').addEventListener('input', event => event.target.setCustomValidity(''));
+document.getElementById('question-name-editor').addEventListener('submit', async event => {
+  event.preventDefault();
+  const field = document.getElementById('question-name');
+  if (field.disabled || event.currentTarget.hidden) return;
+  const title = field.value.trim();
+  if (!title) {
+    closeNameEditor();
+    return;
+  }
+  const imageId = activeImageId;
+  field.disabled = true;
+  try {
+    await imageStore('readwrite', store => {
+      const request = store.get(imageId);
+      request.onsuccess = () => {
+        if (!request.result) throw new Error('Question no longer exists');
+        store.put({ ...request.result, title });
+      };
+      return request;
+    });
+    if (activeImageId === imageId) closeNameEditor();
+    await showSavedImages();
+  } catch {
+    const error = document.getElementById('question-name-error');
+    error.textContent = 'Could not save the name. Please try again.';
+    error.hidden = false;
+  } finally {
+    field.disabled = false;
+  }
+});
+
+function closeProblemEditor() {
+  document.getElementById('problem-editor').hidden = true;
+  document.getElementById('problem-title').hidden = false;
+  document.getElementById('edit-problem').setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('edit-problem').addEventListener('click', () => {
+  if (!document.getElementById('problem-editor').hidden) return;
+  const title = document.getElementById('problem-title');
+  const width = title.getBoundingClientRect().width;
+  document.getElementById('actual-problem').value = activeQuestion || document.getElementById('problem-title').textContent;
+  document.getElementById('problem-edit-error').hidden = true;
+  document.getElementById('problem-editor').hidden = false;
+  title.hidden = true;
+  const field = document.getElementById('actual-problem');
+  field.style.width = `${width}px`;
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight}px`;
+  document.getElementById('edit-problem').setAttribute('aria-expanded', 'true');
+  document.getElementById('actual-problem').focus();
+});
+document.getElementById('cancel-problem-edit').addEventListener('click', () => {
+  closeProblemEditor();
+  document.getElementById('edit-problem').focus();
+});
+document.getElementById('actual-problem').addEventListener('input', event => {
+  event.target.setCustomValidity('');
+  event.target.style.height = 'auto';
+  event.target.style.height = `${event.target.scrollHeight}px`;
+});
+document.getElementById('problem-editor').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!activeFile) return;
+  const field = document.getElementById('actual-problem');
+  const question = field.value.trim();
+  if (!question) {
+    field.setCustomValidity('Enter the actual problem.');
+    field.reportValidity();
+    return;
+  }
+  const file = activeFile;
+  const imageId = activeImageId;
+  const save = event.currentTarget.querySelector('[type="submit"]');
+  save.disabled = true;
+  try {
+    if (imageId !== null) {
+      await imageStore('readwrite', store => {
+        const request = store.get(imageId);
+        request.onsuccess = () => {
+          const record = request.result;
+          if (!record) return;
+          record.question = question;
+          delete record.result;
+          delete record.resultVersion;
+          store.put(record);
+        };
+        return request;
+      });
+    }
+    if (activeImageId !== imageId || activeFile !== file) return;
+    const input = document.getElementById('upload-image');
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    if (imageId !== null) input.form.dataset.imageId = imageId;
+    input.form.dataset.question = question;
+    input.form.requestSubmit();
+  } catch {
+    const error = document.getElementById('problem-edit-error');
+    error.textContent = 'Could not save your problem. Please try again.';
+    error.hidden = false;
+  } finally {
+    save.disabled = false;
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !document.getElementById('question-name-editor').hidden) {
+    closeNameEditor();
+    document.getElementById('rename-question').focus();
+    return;
+  }
+  if (event.key === 'Escape' && !document.getElementById('problem-editor').hidden) {
+    closeProblemEditor();
+    document.getElementById('edit-problem').focus();
+    return;
+  }
+  if (event.key === 'Escape' && sidebar.open) {
+    sidebar.open = false;
+    sidebar.querySelector('summary').focus({ preventScroll: true });
+  }
+});
+document.addEventListener('pointerdown', event => {
+  if (window.matchMedia('(max-width: 900px)').matches && sidebar.open && !sidebar.contains(event.target)) {
+    sidebar.open = false;
+  }
+});
+
+document.getElementById('retry-processing').addEventListener('click', () => {
+  if (!failedUpload) return;
+  const input = document.getElementById('upload-image');
+  const transfer = new DataTransfer();
+  transfer.items.add(failedUpload.file);
+  input.files = transfer.files;
+  if (failedUpload.imageId !== null) input.form.dataset.imageId = failedUpload.imageId;
+  input.form.dataset.question = failedUpload.question || '';
+  input.form.requestSubmit();
+});
 
 function setActiveQuestion(imageId) {
+  if (activeImageId !== imageId) closeNameEditor();
   activeImageId = imageId;
+  const current = [...savedImages.children].find(item => Number(item.dataset.imageId) === imageId);
+  document.getElementById('question-title').textContent = current?.dataset.title || 'Untitled question';
+  document.getElementById('rename-question').disabled = imageId === null;
   savedImages.querySelectorAll('.saved-image').forEach(item => {
     const active = Number(item.dataset.imageId) === imageId;
     item.classList.toggle('is-active', active);
     const button = item.querySelector('.saved-image-open');
+    if (!button) return;
     if (active) button.setAttribute('aria-current', 'true');
     else button.removeAttribute('aria-current');
   });
@@ -26,13 +236,14 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 7; // 7: fitted placeholder bounds are defined in process.py
+const RESULT_VERSION = 8; // 8: explain specific solutions lost or introduced by a step
 
 function isIncorrect(line) {
   return line.valid === false || line.follows_from_previous === false || !!line.error;
 }
 
 function selectStep(index) {
+  document.querySelector('.selection-hint')?.remove();
   document.querySelectorAll('.solution-line').forEach((item, i) => {
     item.hidden = i !== index;
     item.classList.toggle('is-selected', i === index);
@@ -67,6 +278,15 @@ function showLineBoxes(lines) {
     button.style.setProperty('--box-width', `${(right - left) * 100}%`);
     button.style.setProperty('--box-height', `${(bottom - top) * 100}%`);
     button.addEventListener('click', () => selectStep(index));
+    button.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      event.preventDefault();
+      const boxes = [...overlay.querySelectorAll('.line-box')];
+      const direction = ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1;
+      const next = boxes[(boxes.indexOf(button) + direction + boxes.length) % boxes.length];
+      next.click();
+      next.focus({ preventScroll: true });
+    });
     overlay.append(button);
   });
 }
@@ -76,12 +296,10 @@ function showResult(result) {
   output.replaceChildren();
   showLineBoxes(Array.isArray(result?.lines) ? result.lines : []);
   if (typeof result === 'string') output.textContent = result;
-  if (result?.context) {
-    const context = document.createElement('p');
-    context.className = 'solution-context';
-    context.textContent = result.context.goal || result.context.task || '';
-    output.append(context);
-  }
+  const context = result?.context;
+  document.getElementById('problem-summary').hidden = false;
+  document.getElementById('problem-label').textContent = activeQuestion ? 'Your problem' : 'Inferred problem';
+  document.getElementById('problem-title').textContent = activeQuestion || context?.goal || context?.task || 'Add the original problem';
   if (result?.context_error) {
     const warning = document.createElement('p');
     warning.className = 'result-warning';
@@ -110,7 +328,7 @@ function showResult(result) {
       equation.className = 'line-math';
       equation.textContent = line.latex || '';
       item.append(heading, equation);
-      const error = line.error || (line.follows_from_previous === false
+      const error = line.error || line.transition_error || (line.follows_from_previous === false
         ? 'This step does not follow from the previous line; the two lines are not equivalent.' : '');
       if (error) {
         const message = document.createElement('p');
@@ -126,6 +344,12 @@ function showResult(result) {
       lines.append(item);
     });
     output.append(lines);
+    if (result.lines.length) {
+      const hint = document.createElement('p');
+      hint.className = 'selection-hint';
+      hint.textContent = 'Select a step on your work to see feedback.';
+      output.append(hint);
+    }
   }
   showVideos(result?.videos, result?.context?.video_query);
 }
@@ -188,6 +412,8 @@ function hasSavedResult(image) {
 }
 
 function questionTitle(image) {
+  if (image.title) return image.title;
+  if (image.question) return image.question;
   const context = image.result?.context;
   const title = [context?.goal, context?.task, context?.problem_latex]
     .find(value => typeof value === 'string' && value.trim());
@@ -242,10 +468,21 @@ async function keepStoragePersistent() {
   }
 }
 
-function showUploadPreview(file) {
+function showUploadPreview(file, question = '') {
+  activeFile = file;
+  activeQuestion = question;
+  closeProblemEditor();
+  document.getElementById('problem-summary').hidden = false;
+  document.getElementById('problem-label').textContent = question ? 'Your problem' : 'Inferred problem';
+  document.getElementById('problem-title').textContent = question || 'Identifying the problem…';
+  failedUpload = null;
+  document.getElementById('retry-processing').hidden = true;
   document.getElementById('line-overlays').replaceChildren();
   const preview = document.getElementById('upload-preview');
-  preview.onload = null;
+  preview.onload = () => document.getElementById('image-result').scrollIntoView({
+    block: 'start',
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+  });
   if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
   uploadPreviewURL = URL.createObjectURL(file);
   preview.src = uploadPreviewURL;
@@ -257,6 +494,12 @@ function showUploadPreview(file) {
 }
 
 function showHome() {
+  activeFile = null;
+  activeQuestion = '';
+  closeProblemEditor();
+  document.getElementById('launch-feedback').textContent = '';
+  failedUpload = null;
+  document.getElementById('retry-processing').hidden = true;
   setActiveQuestion(null);
   showDeleteNotice(null, '');
   storageStatus.textContent = '';
@@ -328,13 +571,13 @@ document.getElementById('delete-all-questions').addEventListener('click', async 
 });
 
 // Adds the server's result to an already-saved image record.
-async function saveResult(id, result) {
+async function saveResult(id, result, question = '') {
   // Keep the read and write atomic so a late result cannot recreate a deleted question.
   await imageStore('readwrite', store => {
     const request = store.get(id);
     request.onsuccess = () => {
       const record = request.result;
-      if (!record) return;
+      if (!record || (record.question || '') !== question) return;
       record.result = result;
       record.resultVersion = RESULT_VERSION;
       store.put(record);
@@ -358,6 +601,7 @@ async function showSavedImages() {
     const item = document.createElement('li');
     item.className = 'saved-image';
     item.dataset.imageId = image.id;
+    item.dataset.title = title;
     const notice = document.createElement('p');
     notice.className = 'delete-notice';
     notice.setAttribute('role', 'status');
@@ -402,7 +646,7 @@ async function showSavedImages() {
         // Already processed: show the saved result without asking the server again.
         latestRequest++; // ignore any upload still in progress
         document.getElementById('upload-error').hidden = true;
-        showUploadPreview(image.file);
+        showUploadPreview(image.file, image.question || '');
         showResult(image.result);
         return;
       }
@@ -412,6 +656,7 @@ async function showSavedImages() {
       input.files = transfer.files;
       updateSelection(input);
       input.form.dataset.imageId = image.id;
+      input.form.dataset.question = image.question || '';
       input.form.requestSubmit();
     });
     const remove = document.createElement('button');
@@ -427,7 +672,68 @@ async function showSavedImages() {
         showDeleteNotice(image.id, 'Could not delete this image. Please try again.');
       }
     });
-    actions.append(remove);
+    const rename = document.createElement('button');
+    rename.type = 'button';
+    rename.textContent = 'Rename';
+    rename.addEventListener('click', () => {
+      menu.open = false;
+      if (item.querySelector('.sidebar-name-editor')) return;
+      const editor = document.createElement('form');
+      editor.className = 'sidebar-name-editor';
+      const field = document.createElement('input');
+      field.type = 'text';
+      field.value = title;
+      field.maxLength = 120;
+      field.required = true;
+      field.setAttribute('aria-label', 'Question name');
+      editor.append(field);
+      const created = use.querySelector('time');
+      if (created) editor.append(created.cloneNode(true));
+      use.replaceWith(editor);
+      let finished = false;
+      const cancel = () => {
+        finished = true;
+        editor.replaceWith(use);
+      };
+      const save = async () => {
+        if (finished) return;
+        const newTitle = field.value.trim();
+        if (!newTitle || newTitle === title) {
+          cancel();
+          return;
+        }
+        finished = true;
+        field.disabled = true;
+        try {
+          await imageStore('readwrite', store => {
+            const request = store.get(image.id);
+            request.onsuccess = () => {
+              if (request.result) store.put({ ...request.result, title: newTitle });
+            };
+            return request;
+          });
+          await showSavedImages();
+        } catch {
+          editor.replaceWith(use);
+          showDeleteNotice(image.id, 'Could not save the name. Please try again.');
+        }
+      };
+      editor.addEventListener('submit', event => {
+        event.preventDefault();
+        save();
+      });
+      field.addEventListener('blur', save);
+      field.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          event.stopPropagation();
+          cancel();
+          use.focus();
+        }
+      });
+      field.focus();
+      field.select();
+    });
+    actions.append(rename, remove);
     menu.append(summary, actions);
     item.append(use, menu, notice);
     savedImages.append(item);
@@ -440,13 +746,14 @@ document.querySelectorAll('.image-picker').forEach(button => {
   updateSelection(input);
   button.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
+    document.getElementById('launch-feedback').textContent = '';
     const picked = input.files[0];
     updateSelection(input);
     if (!picked) return;
     const rejectFile = () => {
       input.value = '';
       updateSelection(input);
-      storageStatus.textContent = 'Choose a JPEG, PNG, or WebP image, 10 MB or smaller.';
+      document.getElementById('launch-feedback').textContent = 'Choose a JPEG, PNG, or WebP image, 10 MB or smaller.';
     };
     if (!ALLOWED_TYPES.includes(picked.type)) return rejectFile();
     // Shrink before the size check, so a large phone photo still works once it's resized.
@@ -482,7 +789,9 @@ document.querySelectorAll('.panel form').forEach(form => {
     const file = input.files[0];
     // dataset values are strings, but IndexedDB ids are numbers.
     const imageId = form.dataset.imageId ? Number(form.dataset.imageId) : null;
+    const question = form.dataset.question || '';
     delete form.dataset.imageId;
+    delete form.dataset.question;
     if (!file) return;
     setActiveQuestion(imageId);
     showDeleteNotice(null, '');
@@ -492,15 +801,13 @@ document.querySelectorAll('.panel form').forEach(form => {
     const errorMessage = document.getElementById('upload-error');
     button.disabled = true;
     errorMessage.hidden = true;
-    const preview = showUploadPreview(file);
+    showUploadPreview(file, question);
     showVideos([]); // the previous problem's videos don't belong to this one
-    preview.onload = () => document.getElementById('image-result').scrollIntoView({
-      block: 'start',
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-    });
     document.getElementById('process-output').textContent = 'Processing…';
     try {
-      const response = await fetch(form.action, {
+      const url = new URL(form.action);
+      if (question) url.searchParams.set('question', question);
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
@@ -513,6 +820,10 @@ document.querySelectorAll('.panel form').forEach(form => {
       }
       if (isLatest()) {
         showResult(data.result);
+        if (data.result?.context_error) {
+          failedUpload = { file, imageId, question };
+          document.getElementById('retry-processing').hidden = false;
+        }
         input.value = '';
         updateSelection(input);
       }
@@ -520,7 +831,7 @@ document.querySelectorAll('.panel form').forEach(form => {
       // Only save complete results: if Gemini didn't answer (e.g. missing key), retry next time.
       if (imageId !== null && data.result != null && data.result.context != null) {
         try {
-          await saveResult(imageId, data.result);
+          await saveResult(imageId, data.result, question);
           await showSavedImages();
         } catch {
           storageStatus.textContent = 'Could not save the result locally. It will be processed again next time.';
@@ -533,6 +844,8 @@ document.querySelectorAll('.panel form').forEach(form => {
         ? 'Processing took too long. Please try again.'
         : error.message || 'Could not process the image. Please try again.';
       errorMessage.hidden = false;
+      failedUpload = { file, imageId, question };
+      document.getElementById('retry-processing').hidden = false;
     } finally {
       button.disabled = false;
     }

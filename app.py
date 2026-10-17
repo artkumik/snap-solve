@@ -2,7 +2,7 @@ import asyncio
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -57,7 +57,7 @@ def handle_upload(data: bytes, question: str):
 
 
 @app.post("/upload")
-async def upload_image(request: Request, question: str = ""):
+async def upload_image(request: Request, question: str = Query(default="", max_length=2000)):
     length = request.headers.get("content-length", "")
     if length.isdigit() and int(length) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "Image must be 10 MB or smaller.")

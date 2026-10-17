@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import errors, types
 
-from sympy import Eq, S, simplify, solveset, Symbol
+from sympy import Eq, FiniteSet, S, simplify, solveset, Symbol
 from sympy.logic.boolalg import BooleanFalse, BooleanTrue
 from sympy.parsing.latex import parse_latex
 
@@ -55,7 +55,7 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
         "factoring'. Describe the method, not this exact problem or its answer.\n\n"
     )
     if question:
-        prompt += f"The original question was: {question}\n\n"
+        prompt += f"Use this user-provided question as the authoritative problem statement: {question}\n\n"
     prompt += lines_text
 
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -175,6 +175,18 @@ def parse_image_lines(lines: list, question: str = "") -> dict:
     for i in range(1, len(parsed)):
         if parsed[i - 1] is not None and parsed[i] is not None:
             results[i]["follows_from_previous"] = same_meaning(parsed[i - 1], parsed[i], var)
+            if results[i]["follows_from_previous"] is False and all(isinstance(expr, Eq) for expr in parsed[i - 1:i + 1]):
+                try:
+                    before, after = meaning(parsed[i - 1], var), meaning(parsed[i], var)
+                    changes = []
+                    for values, verb in ((before - after, "loses"), (after - before, "introduces")):
+                        if isinstance(values, FiniteSet) and values:
+                            solutions = ", ".join(f"{var} = {value}" for value in sorted(values, key=str))
+                            changes.append(f"This step {verb} {'the solution' if len(values) == 1 else 'solutions'} {solutions}.")
+                    if changes:
+                        results[i]["transition_error"] = " ".join(changes)
+                except Exception:
+                    pass  # The existing equivalence result still explains the invalid step.
 
     final_correct = None
     if parsed and parsed[-1] is not None:
