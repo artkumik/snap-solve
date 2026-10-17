@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 from PIL import Image, ImageDraw
 
-from crop_equations import crop_image, equation_boxes
+from crop_equations import crop_image, equation_boxes, worksheet_boxes
 
 
 image = Image.new("RGB", (300, 200), "white")
@@ -15,6 +15,12 @@ for y in (30, 110):
         draw.rectangle((x, y, x + 15, y + 20), fill="black")
 assert equation_boxes(image, padding=5) == [(35, 25, 141, 56), (35, 105, 141, 136)]
 assert equation_boxes(Image.new("RGB", (300, 200), "white")) == []
+two_columns = Image.new("RGB", (300, 200), "white")
+draw = ImageDraw.Draw(two_columns)
+for box in ((30, 20, 60, 40), (30, 110, 60, 130), (200, 40, 230, 60), (200, 140, 230, 160)):
+    draw.rectangle(box, fill="black")
+assert worksheet_boxes(two_columns, padding=0) == [
+    (30, 20, 61, 41), (30, 110, 61, 131), (200, 40, 231, 61), (200, 140, 231, 161)]
 with TemporaryDirectory() as temporary:
     root = Path(temporary)
     source = root / "worksheet.png"
@@ -22,6 +28,11 @@ with TemporaryDirectory() as temporary:
     original = source.read_bytes()
     count, first = crop_image(source, root / "output")
     assert count == 2 and len(list(first.glob("equation_*.png"))) == 2
+    column_source = root / "columns.png"
+    two_columns.save(column_source)
+    _, ordered = crop_image(column_source, root / "output", padding=0)
+    with Image.open(ordered / "equation_001.png") as first_crop:
+        assert first_crop.size == (31, 21)
     _, second = crop_image(source, root / "output")
     assert first != second and source.read_bytes() == original
     transparent = root / "transparent.png"

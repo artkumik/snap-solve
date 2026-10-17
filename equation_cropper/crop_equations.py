@@ -1,4 +1,4 @@
-"""Split a single-column worksheet into equation images using blank horizontal gaps."""
+"""Crop equations down the left column first, then down the right column."""
 
 import argparse
 from pathlib import Path
@@ -37,13 +37,25 @@ def equation_boxes(image, threshold=190, gap=18, padding=12):
     return boxes
 
 
-def crop_image(source, output, **options):
+def worksheet_boxes(image, columns=2, **options):
+    if columns == 1:
+        return equation_boxes(image, **options)
+    midpoint = image.width // 2
+    boxes = []
+    for left, right in ((0, midpoint), (midpoint, image.width)):
+        column = image.crop((left, 0, right, image.height))
+        boxes.extend((x1 + left, y1, x2 + left, y2)
+                     for x1, y1, x2, y2 in equation_boxes(column, **options))
+    return boxes
+
+
+def crop_image(source, output, columns=2, **options):
     with Image.open(source) as original:
         upright = ImageOps.exif_transpose(original).convert("RGBA")
         # Transparent backgrounds should behave like white paper during detection.
         image = Image.new("RGB", upright.size, "white")
         image.paste(upright, mask=upright.getchannel("A"))
-        boxes = equation_boxes(image, **options)
+        boxes = worksheet_boxes(image, columns=columns, **options)
         if not boxes:
             return 0, None
         base = f"{source.stem}_{source.suffix[1:].lower()}"
@@ -65,6 +77,8 @@ def main():
     parser.add_argument("input", nargs="?", type=Path, default=ROOT / "input",
                         help="An image or a folder of images (default: input/).")
     parser.add_argument("--output", type=Path, default=ROOT / "output")
+    parser.add_argument("--columns", type=int, choices=(1, 2), default=2,
+                        help="Two equal-width columns, left first (default), or one full-width column.")
     parser.add_argument("--gap", type=int, default=18, help="Blank rows needed to split equations (pixels).")
     parser.add_argument("--padding", type=int, default=12, help="Padding around each crop (pixels).")
     parser.add_argument("--threshold", type=int, default=190, help="Pixels darker than this count as ink (1–255).")
@@ -80,7 +94,7 @@ def main():
     failed = False
     for source in sources:
         try:
-            count, destination = crop_image(source, args.output, gap=args.gap,
+            count, destination = crop_image(source, args.output, columns=args.columns, gap=args.gap,
                                            padding=args.padding, threshold=args.threshold)
             print(f"{source.name}: {count} crops" + (f" → {destination}" if destination else " (no equations detected)"))
         except (OSError, ValueError, Image.DecompressionBombError) as error:
