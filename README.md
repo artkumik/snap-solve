@@ -10,6 +10,11 @@ website outline
 
 to do list
 
+    - figure out how the images are stored json
+    - process image asyncronously (loading bar)
+    - have upload for the question (context for solution)
+    - 
+
 ## Run the website
 
 From the project folder, choose either setup.
