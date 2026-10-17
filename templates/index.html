@@ -8,40 +8,119 @@
 </head>
 <body>
   <main>
-    <h1>snap solve</h1>
-    <div class="panel">
-      <form action="/upload" method="post" enctype="multipart/form-data">
-        <button class="image-picker" type="button" aria-controls="upload-image">
-          <img class="action-icon" src="{{ url_for('static', path='/icons/upload.png') }}" alt="">
-          Upload image
-        </button>
-        <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
-        <p class="selected-file" aria-live="polite">No image selected</p>
-        <button type="submit">Continue</button>
-      </form>
-      <form action="/upload" method="post" enctype="multipart/form-data">
-        <button class="image-picker" type="button" aria-controls="take-image">
-          <img class="action-icon" src="{{ url_for('static', path='/icons/camera.png') }}" alt="">
-          Take image
-        </button>
-        <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
-        <p class="selected-file" aria-live="polite">No image selected</p>
-        <button type="submit">Continue</button>
-      </form>
+    <div class="workspace">
+      <div id="launch-screen" class="launch-screen">
+        <h1>snap solve</h1>
+        <p class="launch-intro">Need to check your solution to a math problem?<br>Send over a picture of your work to get started.</p>
+        <div class="panel">
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <button class="image-picker" type="button" aria-controls="upload-image">
+              <span class="action-icon" style="--icon: url('{{ url_for('static', path='/icons/upload.png') }}')" aria-hidden="true"></span>
+              Upload
+            </button>
+            <input type="file" id="upload-image" name="image" multiple accept="image/jpeg,image/png,image/webp" hidden>
+            <p class="selected-file" aria-live="polite">No image selected</p>
+          </form>
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <button class="image-picker" type="button" aria-controls="take-image">
+              <span class="action-icon" style="--icon: url('{{ url_for('static', path='/icons/camera.png') }}')" aria-hidden="true"></span>
+              Camera
+            </button>
+            <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+            <p class="selected-file" aria-live="polite">No image selected</p>
+          </form>
+        </div>
+        <p id="launch-feedback" class="launch-feedback" role="alert"></p>
+      </div>
+      <p id="upload-error" role="alert" hidden></p>
+      <button id="retry-processing" class="retry-processing" type="button" hidden>Try again</button>
+      <div id="image-result" class="result-layout" hidden>
+        <header id="problem-summary" class="problem-summary" hidden>
+          <section class="question-card" aria-labelledby="question-title">
+          <div class="problem-title-row question-title-row">
+            <h2 id="question-title" class="box-heading">Untitled question</h2>
+            <form id="question-name-editor" class="inline-name-editor" hidden>
+              <input id="question-name" type="text" maxlength="120" aria-label="Question name" required>
+              <p id="question-name-error" class="line-error" role="alert" hidden></p>
+            </form>
+            <button id="rename-question" class="edit-problem" type="button" aria-label="Rename question" title="Rename question" aria-expanded="false" aria-controls="question-name-editor">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"></path></svg>
+            </button>
+          </div>
+          </section>
+          <section class="question-card" aria-labelledby="problem-title">
+          <p id="problem-label" class="problem-label">Inferred problem</p>
+          <div class="problem-title-row">
+            <h2 id="problem-title" class="box-heading"></h2>
+          <form id="problem-editor" class="problem-editor" hidden>
+            <textarea id="actual-problem" rows="1" aria-label="Actual problem" maxlength="2000" required></textarea>
+            <p id="problem-edit-error" class="line-error" role="alert" hidden></p>
+            <div class="problem-editor-actions">
+              <button type="submit">Save and recheck</button>
+              <button id="cancel-problem-edit" type="button">Cancel</button>
+            </div>
+          </form>
+            <button id="edit-problem" class="edit-problem" type="button" aria-label="Edit the problem" title="Edit the problem" aria-expanded="false" aria-controls="problem-editor">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"></path></svg>
+            </button>
+          </div>
+
+          </section>
+        </header>
+        <section id="image-pane" class="result-column" aria-labelledby="image-heading">
+          <h2 id="image-heading" class="box-heading">Your work</h2>
+          <div class="image-stage">
+            <img id="upload-preview" class="uploaded-image" alt="Uploaded image" hidden>
+            <div id="line-overlays" class="line-overlays" aria-label="Math steps"></div>
+          </div>
+        </section>
+        <div id="result-divider" role="separator" tabindex="0" aria-label="Resize image and solution panes" aria-orientation="vertical" aria-controls="image-pane solution-pane" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50"></div>
+        <section id="solution-pane" class="result-column" aria-labelledby="solution-heading">
+          <h2 id="solution-heading" class="box-heading">Step feedback</h2>
+          <div id="process-output" aria-live="polite"></div>
+        </section>
+      </div>
+      <section id="video-recommendations" class="video-recommendations" aria-labelledby="video-heading" hidden>
+        <h2 id="video-heading" class="box-heading">Related videos</h2>
+        <div class="video-grid">
+          <div class="video-card">
+            <iframe class="video-embed" title="Related video 1" src="about:blank" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+          </div>
+          <div class="video-card">
+            <iframe class="video-embed" title="Related video 2" src="about:blank" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+          </div>
+          <div class="video-card">
+            <iframe class="video-embed" title="Related video 3" src="about:blank" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+          </div>
+        </div>
+      </section>
     </div>
-    <p id="processing-status" role="status"></p>
-    <section id="processing-result" hidden aria-labelledby="result-heading">
-      <h2 id="result-heading">Processing result</h2>
-      <img id="result-preview" class="uploaded-image" alt="Selected image">
-      <p id="result-text"></p>
-    </section>
-    <section class="saved-images" aria-labelledby="saved-heading">
-      <h2 id="saved-heading">Saved images</h2>
-      <p>Saved in this browser. Continue sends an image to Python for processing in memory, without saving it on the server.</p>
-      <p id="storage-status" role="status">Loading saved images…</p>
+    <details class="saved-images">
+      <summary aria-label="Toggle questions sidebar" title="Toggle questions">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+          <path d="M9 4v16"></path>
+        </svg>
+      </summary>
+      <div class="sidebar-window">
+      <span class="box-heading sidebar-brand">snap solve</span>
+      <button id="new-image" class="new-question" type="button">+ New problem</button>
+      <h2 class="box-heading saved-heading">Your questions</h2>
+      <p id="storage-status" role="status"></p>
       <ul id="saved-images"></ul>
-    </section>
+      <div class="sidebar-footer">
+        <div id="delete-all-confirmation" class="delete-all-confirmation" hidden>
+          <p>Delete all questions and their saved images?</p>
+          <button id="confirm-delete-all" type="button">Delete all</button>
+          <button id="cancel-delete-all" type="button">Cancel</button>
+        </div>
+        <button id="delete-all-questions" type="button" disabled>Delete all</button>
+      </div>
+      </div>
+    </details>
   </main>
+  <script src="{{ url_for('static', path='/backdrop.js') }}"></script>
   <script src="{{ url_for('static', path='/upload.js') }}"></script>
+  <script src="{{ url_for('static', path='/resize.js') }}"></script>
 </body>
 </html>
