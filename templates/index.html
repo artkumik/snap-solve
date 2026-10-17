@@ -15,7 +15,7 @@
         <div class="panel">
           <form action="/upload" method="post" enctype="multipart/form-data">
             <button class="image-picker" type="button" aria-controls="upload-image">
-              <img class="action-icon" src="{{ url_for('static', path='/icons/upload.png') }}" alt="">
+              <span class="action-icon" style="--icon: url('{{ url_for('static', path='/icons/upload.png') }}')" aria-hidden="true"></span>
               Upload
             </button>
             <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
@@ -23,7 +23,7 @@
           </form>
           <form action="/upload" method="post" enctype="multipart/form-data">
             <button class="image-picker" type="button" aria-controls="take-image">
-              <img class="action-icon" src="{{ url_for('static', path='/icons/camera.png') }}" alt="">
+              <span class="action-icon" style="--icon: url('{{ url_for('static', path='/icons/camera.png') }}')" aria-hidden="true"></span>
               Camera
             </button>
             <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
@@ -72,6 +72,7 @@
       <ul id="saved-images"></ul>
     </details>
   </main>
+  <script src="{{ url_for('static', path='/backdrop.js') }}"></script>
   <script src="{{ url_for('static', path='/upload.js') }}"></script>
   <script src="{{ url_for('static', path='/resize.js') }}"></script>
 </body>

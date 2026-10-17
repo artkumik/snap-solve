@@ -34,16 +34,9 @@ main:has(> .saved-images[open]) { grid-template-columns: 320px minmax(0, 1fr); }
   min-height: calc(100svh - 72px);
   padding-block: 40px;
 }
-.launch-screen::before {
-  content: '';
-  position: fixed;
-  inset: -80px -100px -80px -12px;
-  z-index: -1;
-  pointer-events: none;
-  background: url('/static/images/launch-dither.svg') center / 100% 100% no-repeat;
-  image-rendering: pixelated;
-}
-main:has(> .saved-images[open]) .launch-screen::before { left: 244px; }
+/* Dithered wave behind the launch screen, drawn by backdrop.js in the theme colors. */
+.backdrop { position: absolute; top: 0; left: 0; z-index: -1; pointer-events: none; image-rendering: pixelated; }
+body:has(#launch-screen[hidden]) .backdrop { display: none; }
 .launch-screen:not([hidden]) { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .launch-screen h1 { width: min(100%, 480px); margin: 0 0 20px; color: var(--accent); font-family: ui-rounded, 'Arial Rounded MT Bold', 'Trebuchet MS', sans-serif; font-size: clamp(2.5rem, 6vw, 3.5rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1.2; }
 .launch-intro { width: min(100%, 480px); margin: 0 0 32px; color: var(--muted); font-family: ui-rounded, 'Trebuchet MS', sans-serif; text-align: center; line-height: 1.8; text-wrap: balance; }
@@ -80,7 +73,15 @@ form {
   border-radius: 10px;
   background: var(--surface);
 }
-.action-icon { width: 48px; height: 48px; object-fit: contain; }
+.action-icon {
+  display: block;
+  width: 48px;
+  height: 48px;
+  /* The icon file is used as a stencil, so the icon takes the button's text color exactly. */
+  background: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
 button {
   margin-top: auto;
   padding: 12px 16px;
@@ -109,7 +110,7 @@ button:hover { background: var(--accent-hover); }
 .image-picker:hover { background: var(--accent-hover); }
 .launch-screen .image-picker { flex-direction: column; justify-content: center; gap: 10px; width: 100%; min-height: 112px; padding: 16px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-family: ui-rounded, 'Trebuchet MS', sans-serif; font-size: 0.95rem; box-shadow: 0 6px 24px rgb(0 0 0 / 12%); transition: background 160ms ease, box-shadow 160ms ease; }
 .launch-screen .image-picker:hover { background: var(--accent-hover); box-shadow: 0 8px 28px rgb(0 0 0 / 16%); }
-.launch-screen .action-icon { width: 40px; height: 40px; filter: brightness(0); }
+.launch-screen .action-icon { width: 40px; height: 40px; }
 @media (max-width: 560px) {
   .launch-screen > .panel { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   .launch-screen .image-picker { padding: 16px 12px; }
@@ -177,7 +178,6 @@ button:disabled { opacity: 0.5; cursor: default; }
 a { color: var(--focus); }
 
 @media (max-width: 900px) {
-  .launch-screen::before, main:has(> .saved-images[open]) .launch-screen::before { left: 0; }
   main, main:has(> .saved-images[open]) { grid-template-columns: minmax(0, 1fr); }
   .workspace { grid-column: 1; grid-row: 2; padding: 12px; }
   .saved-images { position: static; height: auto; }
