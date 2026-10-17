@@ -50,15 +50,16 @@ function showLineBoxes(lines) {
   overlay.replaceChildren();
   lines.forEach((line, index) => {
     const bounds = line.bounds;
-    if (!isIncorrect(line) || !bounds) return;
+    if (!bounds) return;
     const { left, right, top, bottom } = bounds;
     if (![left, right, top, bottom].every(value => Number.isFinite(value) && value >= 0 && value <= 1)
         || right <= left || bottom <= top) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'line-box';
+    if (!isIncorrect(line)) button.classList.add('is-correct');
     button.dataset.step = index;
-    button.setAttribute('aria-label', `Explain error on line ${line.line ?? index + 1}`);
+    button.setAttribute('aria-label', `Show details for line ${line.line ?? index + 1}`);
     button.setAttribute('aria-controls', `solution-step-${index}`);
     button.setAttribute('aria-pressed', 'false');
     button.style.setProperty('--box-left', `${left * 100}%`);
@@ -260,6 +261,14 @@ function showHome() {
   showDeleteNotice(null, '');
   storageStatus.textContent = '';
   latestRequest++; // ignore any upload still in progress
+  const preview = document.getElementById('upload-preview');
+  preview.onload = null;
+  preview.removeAttribute('src');
+  preview.hidden = true;
+  if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
+  uploadPreviewURL = null;
+  document.getElementById('line-overlays').replaceChildren();
+  document.getElementById('process-output').replaceChildren();
   document.getElementById('image-result').hidden = true;
   showVideos([]);
   document.getElementById('upload-error').hidden = true;

@@ -148,6 +148,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .line-overlays { position: relative; grid-area: 1 / 1; z-index: 1; min-width: 0; min-height: 0; pointer-events: none; }
 .line-box { position: absolute; left: var(--box-left); top: var(--box-top); width: var(--box-width); height: var(--box-height); margin: 0; padding: 0; border: 2px solid var(--accent); border-radius: 2px; background: rgb(255 82 87 / 8%); pointer-events: auto; }
 .line-box:hover, .line-box[aria-pressed="true"] { background: rgb(255 82 87 / 22%); }
+.line-box.is-correct { border-color: #E5E7EB; background: transparent; }
+.line-box.is-correct:hover, .line-box.is-correct[aria-pressed="true"] { border-color: #D1D5DB; background: rgb(229 231 235 / 8%); }
 .solution-line.is-selected { background: var(--inset); }
 .solution-line:focus { outline: none; }
 #process-output { min-height: 240px; overflow-wrap: anywhere; line-height: 1.6; }
