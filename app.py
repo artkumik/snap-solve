@@ -7,6 +7,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from process import process_image
+
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -21,12 +23,6 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 @app.get("/")
 def index(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
-
-
-def process_image(image_path: Path) -> bool:
-    # math here?
-    print(image_path)
-    return True
 
 
 @app.post("/upload")
