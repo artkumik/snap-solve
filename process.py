@@ -1,7 +1,6 @@
-from pathlib import Path
+from PIL import Image
 
 
-def process_image(image_path: Path) -> bool:
-    # math here?
-    print(image_path)
+def process_image(image: Image.Image) -> bool:
+    # Math processing will use this in-memory image.
     return True

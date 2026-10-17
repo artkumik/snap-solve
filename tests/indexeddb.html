@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>IndexedDB check</title>
+<!-- Open this file in a browser to run the storage round-trip check. -->
+<form>
+  <button type="button" class="image-picker" aria-controls="upload-image">Choose</button>
+  <input type="file" id="upload-image" hidden>
+  <p class="selected-file"></p>
+  <button type="submit">Continue</button>
+</form>
+<p id="storage-status"></p>
+<ul id="saved-images"></ul>
+<pre id="test-result">RUNNING</pre>
+<script src="../static/upload.js"></script>
+<script>
+(async () => {
+  let id;
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  try {
+    const file = new File(['test image'], 'storage-check.png', { type: 'image/png' });
+    id = await imageStore('readwrite', store => store.add({ file, savedAt: Date.now() }));
+    // A separate connection verifies data was committed, beyond in-memory UI state.
+    const connection = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('snap-solve', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const record = await new Promise((resolve, reject) => {
+      const request = connection.transaction('images').objectStore('images').get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    connection.close();
+    assert(await record.file.text() === 'test image', 'File bytes did not persist');
+    await showSavedImages();
+    const row = [...savedImages.children].find(row => row.querySelector('span').textContent === file.name);
+    assert(row, 'Saved image missing from list');
+    row.querySelector('button').click();
+    const input = document.getElementById('upload-image');
+    assert(input.files[0].name === file.name, 'Saved file not restored to upload input');
+    assert(!input.form.querySelector('[type="submit"]').disabled, 'Continue not enabled');
+    await imageStore('readwrite', store => store.delete(id));
+    assert(!(await imageStore('readonly', store => store.get(id))), 'Delete failed');
+    document.getElementById('test-result').textContent = 'PASS: file persistence, saved list, reuse, and deletion';
+  } catch (error) {
+    document.getElementById('test-result').textContent = 'FAIL: ' + error.message;
+  } finally {
+    if (id !== undefined) await imageStore('readwrite', store => store.delete(id));
+  }
+})();
+</script>

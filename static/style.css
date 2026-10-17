@@ -72,3 +72,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 .uploaded-image { max-width: 100%; height: auto; }
+
+.saved-images { margin-top: 32px; }
+.saved-images h2 { margin-bottom: 8px; }
+#saved-images { list-style: none; padding: 0; display: grid; gap: 16px; }
+.saved-image { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px; background: #B4C5E4; border-radius: 10px; }
+.saved-image img { width: 64px; height: 64px; object-fit: contain; }
+.saved-image span { flex: 1; min-width: 100px; overflow-wrap: anywhere; }
+.saved-image button { margin: 0; }

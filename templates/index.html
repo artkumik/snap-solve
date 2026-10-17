@@ -29,6 +29,18 @@
         <button type="submit">Continue</button>
       </form>
     </div>
+    <p id="processing-status" role="status"></p>
+    <section id="processing-result" hidden aria-labelledby="result-heading">
+      <h2 id="result-heading">Processing result</h2>
+      <img id="result-preview" class="uploaded-image" alt="Selected image">
+      <p id="result-text"></p>
+    </section>
+    <section class="saved-images" aria-labelledby="saved-heading">
+      <h2 id="saved-heading">Saved images</h2>
+      <p>Saved in this browser. Continue sends an image to Python for processing in memory, without saving it on the server.</p>
+      <p id="storage-status" role="status">Loading saved images…</p>
+      <ul id="saved-images"></ul>
+    </section>
   </main>
   <script src="{{ url_for('static', path='/upload.js') }}"></script>
 </body>
