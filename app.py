@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -39,6 +40,6 @@ async def upload_image(request: Request):
         raise HTTPException(400, "Invalid image.") from exc
 
     try:
-        return {"result": process_image(normalized)}
+        return {"result": await run_in_threadpool(process_image, normalized)}
     finally:
         normalized.close()
