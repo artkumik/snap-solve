@@ -2,12 +2,64 @@ const storageStatus = document.getElementById('storage-status');
 const savedImages = document.getElementById('saved-images');
 let uploadPreviewURL;
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 1;
+const RESULT_VERSION = 3; // 3: results include related videos (redo ones saved without)
 
 function showResult(result) {
   document.getElementById('process-output').textContent = result == null ? '' : (
     typeof result === 'string' ? result : JSON.stringify(result, null, 2)
   );
+  showVideos(result?.videos, result?.context?.video_query);
+}
+
+// Fills the "Related videos" cards from the server's list of {id, title, channel}, plus a
+// button that opens the same search on YouTube. Without embedded videos (e.g. no YouTube key)
+// the button still shows; the section hides only when there is nothing to search for.
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+function showVideos(videos, query) {
+  const valid = (Array.isArray(videos) ? videos : []).filter(video => YOUTUBE_ID.test(video?.id));
+  const section = document.getElementById('video-recommendations');
+  const search = typeof query === 'string' ? query.trim() : '';
+  section.hidden = valid.length === 0 && !search;
+  section.querySelector('.video-grid').hidden = valid.length === 0;
+  let link = section.querySelector('.video-search');
+  if (!link) {
+    link = document.createElement('a');
+    link.className = 'video-search';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    section.append(link);
+  }
+  link.hidden = !search;
+  if (search) {
+    link.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(search)}`;
+    link.textContent = valid.length ? `More videos on YouTube: ${search}` : `Watch tutorials on YouTube: ${search}`;
+  }
+  document.querySelectorAll('#video-recommendations .video-card').forEach((card, i) => {
+    const video = valid[i];
+    const frame = card.querySelector('.video-embed');
+    let caption = card.querySelector('.video-caption');
+    if (!caption) {
+      caption = document.createElement('p');
+      caption.className = 'video-caption';
+      card.append(caption);
+    }
+    card.hidden = !video;
+    if (!video) {
+      if (frame.getAttribute('src') !== 'about:blank') frame.src = 'about:blank'; // stops playback
+      caption.replaceChildren();
+      return;
+    }
+    const src = `https://www.youtube-nocookie.com/embed/${video.id}`;
+    if (frame.src !== src) frame.src = src;
+    frame.title = video.title || `Related video ${i + 1}`;
+    const title = document.createElement('span');
+    title.className = 'video-title';
+    title.textContent = video.title || '';
+    const channel = document.createElement('span');
+    channel.className = 'video-channel';
+    channel.textContent = video.channel || '';
+    caption.replaceChildren(title, channel);
+  });
 }
 
 function hasSavedResult(image) {
@@ -78,7 +130,7 @@ function showUploadPreview(file) {
 document.getElementById('new-image').addEventListener('click', () => {
   latestRequest++; // ignore any upload still in progress
   document.getElementById('image-result').hidden = true;
-  document.getElementById('video-recommendations').hidden = true;
+  showVideos([]);
   document.getElementById('upload-error').hidden = true;
   document.getElementById('launch-screen').hidden = false;
   document.querySelectorAll('.panel input[type="file"]').forEach(input => {
@@ -160,7 +212,6 @@ async function showSavedImages() {
         // Already processed: show the saved result without asking the server again.
         latestRequest++; // ignore any upload still in progress
         document.getElementById('upload-error').hidden = true;
-        document.getElementById('video-recommendations').hidden = false;
         showUploadPreview(image.file);
         showResult(image.result);
         return;
@@ -248,7 +299,7 @@ document.querySelectorAll('.panel form').forEach(form => {
     button.disabled = true;
     errorMessage.hidden = true;
     const preview = showUploadPreview(file);
-    document.getElementById('video-recommendations').hidden = false;
+    showVideos([]); // the previous problem's videos don't belong to this one
     preview.onload = () => document.getElementById('image-result').scrollIntoView({
       block: 'start',
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
@@ -272,7 +323,8 @@ document.querySelectorAll('.panel form').forEach(form => {
         updateSelection(input);
       }
       // Save the result even if the user moved on, so it's ready next time.
-      if (imageId !== null && data.result != null) {
+      // Only save complete results: if Gemini didn't answer (e.g. missing key), retry next time.
+      if (imageId !== null && data.result != null && data.result.context != null) {
         try {
           await saveResult(imageId, data.result);
           await showSavedImages();

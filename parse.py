@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -7,7 +8,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 from sympy import Eq, S, simplify, solveset, Symbol
 from sympy.logic.boolalg import BooleanFalse, BooleanTrue
@@ -20,6 +21,27 @@ class ProblemContext(BaseModel):
     goal: str
     variables: list[str]
     problem_latex: str
+    video_query: str
+
+log = logging.getLogger(__name__)
+
+# Models to try, in order. Gemini's free-tier quotas are counted per model, so when one runs
+# out for the day the next is used. IDs Google doesn't recognize are simply skipped.
+# Override in .env, e.g. GEMINI_MODELS=gemini-3.8-flash,gemini-2.5-flash
+DEFAULT_MODELS = "gemini-3.8-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash"
+SKIP_EXHAUSTED_FOR = 60 * 60       # retry a model whose quota ran out after an hour
+SKIP_UNKNOWN_FOR = 24 * 60 * 60    # a model ID Google rejected is skipped for a day
+_skip_until: dict[str, float] = {}
+
+# Identical work (same lines and question) is answered from memory instead of asking Gemini
+# again, so repeated test uploads don't use up the daily quota. Cleared on server restart.
+CACHE_LIMIT = 256
+_context_cache: dict[tuple[str, str], ProblemContext] = {}
+
+
+def gemini_models() -> list[str]:
+    return [m.strip() for m in os.getenv("GEMINI_MODELS", DEFAULT_MODELS).split(",") if m.strip()]
+
 
 def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
     """Ask Gemini what problem the student is solving. Returns None if that fails."""
@@ -27,29 +49,62 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
         "These are lines of a student's handwritten math work, transcribed to LaTeX, "
         "one per line. Identify what problem they are solving. Do not solve it.\n"
         "For problem_latex, give the original problem as one LaTeX equation or expression, "
-        "for example 'x^2 = 3x' or '\\lim_{x \\to \\infty} x^2'.\n\n"
+        "for example 'x^2 = 3x' or '\\lim_{x \\to \\infty} x^2'.\n"
+        "For video_query, give a short YouTube search phrase (3 to 8 words) for a tutorial "
+        "on the method this problem needs, for example 'solving quadratic equations by "
+        "factoring'. Describe the method, not this exact problem or its answer.\n\n"
     )
     if question:
         prompt += f"The original question was: {question}\n\n"
     prompt += lines_text
 
-    try:
-        # Give up after 30 s (and don't retry) so a slow or stuck request can't hang the upload.
-        client = genai.Client(
-            api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
-            http_options=types.HttpOptions(
-                timeout=30_000, retry_options=types.HttpRetryOptions(attempts=1)),
-        )
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-            config={"response_mime_type": "application/json", "response_schema": ProblemContext},
-        )
-        return response.parsed
-    except Exception as exc:
-        # Missing API key, network error, bad model name, ... The line checks still run without it.
-        logging.getLogger(__name__).warning("Gemini context failed: %r", exc)
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        log.warning("GEMINI_API_KEY is not set, so no problem context or related videos. "
+                    "Add it to .env (see .env.example) and restart the server.")
         return None
+    cache_key = (lines_text, question)
+    if cache_key in _context_cache:
+        return _context_cache[cache_key]
+
+    # Give up after 30 s (and don't retry) so a slow or stuck request can't hang the upload.
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
+        timeout=30_000, retry_options=types.HttpRetryOptions(attempts=1)))
+    for model in gemini_models():
+        if _skip_until.get(model, 0) > time.time():
+            continue
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config={"response_mime_type": "application/json", "response_schema": ProblemContext},
+            )
+        except errors.APIError as exc:
+            if exc.code == 429:  # this model's quota is used up; try the next one
+                _skip_until[model] = time.time() + SKIP_EXHAUSTED_FOR
+                log.warning("Gemini model %s is out of quota; trying the next model.", model)
+                continue
+            if exc.code in (400, 404):  # unknown model ID, or it can't do this request
+                _skip_until[model] = time.time() + SKIP_UNKNOWN_FOR
+                log.warning("Gemini model %s is unavailable (%s); trying the next model.", model, exc.code)
+                continue
+            log.warning("Gemini context failed: %r", exc)  # bad key, server error, ...
+            return None
+        except Exception as exc:  # network error, timeout, ...
+            log.warning("Gemini context failed: %r", exc)
+            return None
+        context = response.parsed
+        if not isinstance(context, ProblemContext):
+            log.warning("Gemini model %s returned no usable answer.", model)
+            return None
+        if len(_context_cache) >= CACHE_LIMIT:
+            _context_cache.pop(next(iter(_context_cache)))  # drop the oldest entry
+        _context_cache[cache_key] = context
+        return context
+
+    log.warning("Every Gemini model is out of quota or unavailable right now; the daily free "
+                "limits reset at midnight Pacific time. The math checks still work without it.")
+    return None
 
 def check_line(latex: str):
     """Returns (sympy_object, None) if valid, or (None, error_message) if not."""

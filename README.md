@@ -33,6 +33,7 @@ You also need a Gemini API key. Create a `.env` file in the project folder
 
 ```dotenv
 GEMINI_API_KEY=your-key-here
+YOUTUBE_API_KEY=your-youtube-key-here
 ```
 
 The server loads this file automatically, including when started from another folder.
@@ -49,6 +50,13 @@ export GEMINI_API_KEY="your-key-here"
 ```
 
 Without a key the site still runs, but the "what problem is this" step is skipped.
+
+**Related videos** need a YouTube Data API key (`YOUTUBE_API_KEY`). In the
+[Google Cloud console](https://console.cloud.google.com/), pick or create a project,
+enable **YouTube Data API v3** (APIs & Services → Library), then create a key under
+APIs & Services → Credentials. The free quota is 100 searches per day; each problem is
+searched once, since its videos are saved in the browser with the rest of the result.
+Without this key, everything else works and the "Related videos" section stays hidden.
 
 ### Conda
 
@@ -82,7 +90,8 @@ Open http://localhost:8000.
   python -m uvicorn app:app --host 0.0.0.0 --port $PORT
   ```
 
-- Set `GEMINI_API_KEY` as a secret/environment variable in the host's dashboard. Anyone who
+- Set `GEMINI_API_KEY` and `YOUTUBE_API_KEY` as secrets/environment variables in the
+  host's dashboard. Anyone who
   can open the site can use it, so keep an eye on usage.
 - Photos are shrunk to 2048 px in the browser before upload; the server also refuses images
   over 10 MB or 20 megapixels and processes at most 4 at a time, so it fits on a small host.
