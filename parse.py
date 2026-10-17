@@ -1,4 +1,8 @@
 import logging
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from pydantic import BaseModel
 
@@ -8,6 +12,8 @@ from google.genai import types
 from sympy import Eq, S, simplify, solveset, Symbol
 from sympy.logic.boolalg import BooleanFalse, BooleanTrue
 from sympy.parsing.latex import parse_latex
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 class ProblemContext(BaseModel):
     task: str
@@ -29,8 +35,11 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
 
     try:
         # Give up after 30 s (and don't retry) so a slow or stuck request can't hang the upload.
-        client = genai.Client(http_options=types.HttpOptions(
-            timeout=30_000, retry_options=types.HttpRetryOptions(attempts=1)))
+        client = genai.Client(
+            api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
+            http_options=types.HttpOptions(
+                timeout=30_000, retry_options=types.HttpRetryOptions(attempts=1)),
+        )
         response = client.models.generate_content(
             model="gemini-3.8-flash",
             contents=prompt,
@@ -113,4 +122,4 @@ def combine_lines(lines: list) -> str:
 if __name__ == "__main__":
     import json
     result = parse_image_lines([{"data": "x^2 = 3x"}, {"data": "x = 3"}])
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result, indent=2))

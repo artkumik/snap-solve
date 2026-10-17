@@ -28,8 +28,18 @@ to do list
 
 From the project folder, choose either setup.
 
-You also need a Gemini API key. Set it once in the terminal before starting the server
-(each person uses their own key; never commit it):
+You also need a Gemini API key. Create a `.env` file in the project folder
+(next to `app.py`), using `.env.example` as a template:
+
+```dotenv
+GEMINI_API_KEY=your-key-here
+```
+
+The server loads this file automatically, including when started from another folder.
+Restart the server after changing the key. `.env` is ignored by Git; never commit it.
+Existing environment variables take precedence over values in `.env`.
+
+Alternatively, set the key in your terminal before starting the server:
 
 ```sh
 # Windows PowerShell
