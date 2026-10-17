@@ -1,6 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>IndexedDB check</title>
+<button id="new-image">New question</button>
+<div id="launch-screen"></div>
 <!-- Open this file in a browser to run the storage round-trip check. -->
 <form>
   <button type="button" class="image-picker" aria-controls="upload-image">Choose</button>
@@ -9,7 +11,10 @@
 </form>
 <p id="storage-status"></p>
 <ul id="saved-images"></ul>
-<img id="upload-preview" alt="Selected image" hidden>
+<div id="image-result" hidden>
+  <img id="upload-preview" alt="Selected image" hidden>
+  <div id="process-output"></div>
+</div>
 <pre id="test-result">RUNNING</pre>
 <script src="../static/upload.js"></script>
 <script>

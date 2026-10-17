@@ -1,6 +1,5 @@
 const storageStatus = document.getElementById('storage-status');
 const savedImages = document.getElementById('saved-images');
-const previewURLs = [];
 let uploadPreviewURL;
 
 function showUploadPreview(file) {
@@ -10,8 +9,27 @@ function showUploadPreview(file) {
   uploadPreviewURL = URL.createObjectURL(file);
   preview.src = uploadPreviewURL;
   preview.hidden = false;
+  document.getElementById('image-result').hidden = false;
+  document.getElementById('launch-screen').hidden = true;
+  document.getElementById('process-output').textContent = '';
   return preview;
 }
+
+document.getElementById('new-image').addEventListener('click', () => {
+  document.getElementById('image-result').hidden = true;
+  document.getElementById('video-recommendations').hidden = true;
+  document.getElementById('upload-error').hidden = true;
+  document.getElementById('launch-screen').hidden = false;
+  document.querySelectorAll('.panel input[type="file"]').forEach(input => {
+    input.value = '';
+    updateSelection(input);
+  });
+  document.querySelector('.image-picker').focus({ preventScroll: true });
+  document.getElementById('launch-screen').scrollIntoView({
+    block: 'start',
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+  });
+});
 
 const database = new Promise((resolve, reject) => {
   const request = indexedDB.open('snap-solve', 1);
@@ -42,28 +60,37 @@ function updateSelection(input) {
 
 async function showSavedImages() {
   const images = await imageStore('readonly', store => store.getAll());
-  previewURLs.splice(0).forEach(url => URL.revokeObjectURL(url));
   savedImages.replaceChildren();
   storageStatus.textContent = images.length ? 'Images stay here until you delete them or browser storage is cleared.' : 'No saved images yet.';
 
   for (const image of images.reverse()) {
     const item = document.createElement('li');
     item.className = 'saved-image';
-    const preview = document.createElement('img');
-    preview.src = URL.createObjectURL(image.file);
-    previewURLs.push(preview.src);
-    preview.alt = image.file.name;
+    const menu = document.createElement('details');
+    menu.className = 'image-menu';
+    const summary = document.createElement('summary');
+    summary.setAttribute('aria-label', `Actions for ${image.file.name}`);
     const name = document.createElement('span');
     name.textContent = image.file.name;
+    const dots = document.createElement('span');
+    dots.className = 'image-menu-dots';
+    dots.textContent = '⋮';
+    dots.setAttribute('aria-hidden', 'true');
+    summary.append(dots);
+    const actions = document.createElement('div');
+    actions.className = 'image-menu-actions';
     const use = document.createElement('button');
     use.type = 'button';
-    use.textContent = 'Use image';
+    use.className = 'saved-image-open';
+    use.append(name);
+    use.title = image.file.name;
     use.addEventListener('click', () => {
       const input = document.getElementById('upload-image');
       const transfer = new DataTransfer();
       transfer.items.add(image.file);
       input.files = transfer.files;
       updateSelection(input);
+      menu.open = false;
       input.form.requestSubmit();
     });
     const remove = document.createElement('button');
@@ -78,7 +105,9 @@ async function showSavedImages() {
         storageStatus.textContent = 'Could not delete this image. Please try again.';
       }
     });
-    item.append(preview, name, use, remove);
+    actions.append(remove);
+    menu.append(summary, actions);
+    item.append(use, menu);
     savedImages.append(item);
   }
 }
@@ -97,17 +126,13 @@ document.querySelectorAll('.image-picker').forEach(button => {
       storageStatus.textContent = 'Choose a JPEG, PNG, or WebP image, 10 MB or smaller.';
       return;
     }
-    button.disabled = true;
+    input.form.requestSubmit();
     try {
       await imageStore('readwrite', store => store.add({ file, savedAt: Date.now() }));
       await showSavedImages();
     } catch {
       storageStatus.textContent = 'Could not save locally. Browser storage may be unavailable or full. The image will still be uploaded.';
-    } finally {
-      button.disabled = false;
-      updateSelection(input);
     }
-    input.form.requestSubmit();
   });
 });
 
@@ -125,21 +150,25 @@ document.querySelectorAll('.panel form').forEach(form => {
     const errorMessage = document.getElementById('upload-error');
     button.disabled = true;
     errorMessage.hidden = true;
+    const preview = showUploadPreview(file);
+    document.getElementById('video-recommendations').hidden = false;
+    preview.onload = () => document.getElementById('image-result').scrollIntoView({
+      block: 'start',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+    });
     try {
       const response = await fetch(form.action, {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
       });
+      const data = await response.json();
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.detail || 'Image processing failed.');
       }
-      const preview = showUploadPreview(file);
-      preview.onload = () => preview.scrollIntoView({
-        block: 'start',
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-      });
+      document.getElementById('process-output').textContent = data.result == null ? '' : (
+        typeof data.result === 'string' ? data.result : JSON.stringify(data.result)
+      );
       input.value = '';
       updateSelection(input);
     } catch (error) {

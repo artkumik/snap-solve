@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Immediate image preview check</title>
+<button id="new-image">New question</button>
+<link rel="stylesheet" href="../static/style.css">
+<div id="launch-screen" class="panel">
+  <form action="/upload"><button type="button" class="image-picker" aria-controls="upload-image">Upload</button><input type="file" id="upload-image"><p class="selected-file"></p></form>
+  <form action="/upload"><button type="button" class="image-picker" aria-controls="take-image">Camera</button><input type="file" id="take-image"><p class="selected-file"></p></form>
+</div>
+<p id="storage-status"></p><ul id="saved-images"></ul><p id="upload-error" hidden></p>
+<div id="image-result" class="result-layout" hidden><img id="upload-preview" hidden><div id="process-output"></div></div>
+<section id="video-recommendations" hidden></section>
+<pre id="test-result">RUNNING</pre>
+<script>
+// Keep processing pending to verify it never blocks the local preview.
+window.fetch = () => new Promise(() => {});
+</script>
+<script src="../static/upload.js"></script>
+<script>
+(async () => {
+  let savedId;
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  try {
+    const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1EAAAAASUVORK5CYII='), c => c.charCodeAt(0));
+    const file = new File([bytes], 'preview-check.png', {type: 'image/png'});
+    for (const id of ['upload-image', 'take-image']) {
+      const input = document.getElementById(id);
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      // Submit directly: this also isolates preview behavior from IndexedDB.
+      input.form.requestSubmit();
+      const preview = document.getElementById('upload-preview');
+      assert(!document.getElementById('image-result').hidden, id + ': result panel hidden');
+      assert(getComputedStyle(document.getElementById('image-result')).display === 'grid', 'Result layout not visible');
+      await preview.decode();
+      assert(preview.naturalWidth === 1, id + ': preview did not load');
+      assert(document.getElementById('process-output').textContent === '', 'Output should remain blank while pending');
+    }
+    savedId = await imageStore('readwrite', store => store.add({file, savedAt: Date.now()}));
+    await showSavedImages();
+    const row = [...savedImages.children].find(row => row.querySelector('span').textContent === file.name);
+    row.querySelector('button').click();
+    await document.getElementById('upload-preview').decode();
+    assert(!document.getElementById('image-result').hidden, 'Saved image preview hidden');
+    document.getElementById('test-result').textContent = 'PASS: upload, camera, and saved-image previews display while processing is pending';
+  } catch (error) {
+    document.getElementById('test-result').textContent = 'FAIL: ' + error.message;
+  } finally {
+    if (savedId !== undefined) await imageStore('readwrite', store => store.delete(savedId));
+  }
+})();
+</script>
