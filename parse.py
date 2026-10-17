@@ -44,7 +44,7 @@ def gemini_models() -> list[str]:
 
 
 def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
-    """Ask Gemini what problem the student is solving. Returns None if that fails."""
+    """Ask Gemini what problem the student is solving."""
     prompt = (
         "These are lines of a student's handwritten math work, transcribed to LaTeX, "
         "one per line. Identify what problem they are solving. Do not solve it.\n"
@@ -58,6 +58,7 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
         prompt += f"The original question was: {question}\n\n"
     prompt += lines_text
 
+<<<<<<< HEAD
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         log.warning("GEMINI_API_KEY is not set, so no problem context or related videos. "
@@ -105,6 +106,35 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
     log.warning("Every Gemini model is out of quota or unavailable right now; the daily free "
                 "limits reset at midnight Pacific time. The math checks still work without it.")
     return None
+=======
+    try:
+        # Stay within the browser's 90-second upload timeout.
+        client = genai.Client(
+            api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
+            http_options=types.HttpOptions(
+                timeout=60_000, retry_options=types.HttpRetryOptions(attempts=1)),
+        )
+        response = client.models.generate_content(
+            model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+            contents=prompt,
+            config={"response_mime_type": "application/json", "response_schema": ProblemContext,
+                    "thinking_config": types.ThinkingConfig(thinking_level="low")},
+        )
+        return response.parsed
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        messages = {
+            400: "Gemini rejected the request. Check the API key and model configuration.",
+            401: "Gemini authentication failed. Check GEMINI_API_KEY in .env.",
+            403: "Gemini access denied. Check your API key permissions.",
+            404: "The configured Gemini model is unavailable.",
+            429: "Gemini quota or rate limit reached. Check usage and billing, then retry.",
+            504: "Gemini timed out. Open this question again to retry.",
+        }
+        message = messages.get(code, "Could not get context from Gemini. Check the key and connection, then retry.")
+        logging.getLogger(__name__).warning("Gemini context failed (%s, status %s)", type(exc).__name__, code)
+        raise RuntimeError(message) from exc
+>>>>>>> 35c014720f1369d63e67fb9498a370e06b395490
 
 def check_line(latex: str):
     """Returns (sympy_object, None) if valid, or (None, error_message) if not."""
@@ -149,7 +179,14 @@ def reaches_goal(final, context: ProblemContext | None, var: Symbol):
         return None
 
 def parse_image_lines(lines: list, question: str = "") -> dict:
-    context = get_context(combine_lines(lines), question)
+    context_error = None
+    try:
+        context = get_context(combine_lines(lines), question)
+        if context is None:
+            context_error = "Gemini returned no context. Open this question again to retry."
+    except RuntimeError as exc:
+        context = None
+        context_error = str(exc)
     var = Symbol(context.variables[0]) if context and context.variables else Symbol("x")
 
     results, parsed = [], []
@@ -168,7 +205,10 @@ def parse_image_lines(lines: list, question: str = "") -> dict:
     if parsed and parsed[-1] is not None:
         final_correct = reaches_goal(parsed[-1], context, var)
 
-    return {"context": context.model_dump() if context else None, "lines": results, "final_correct": final_correct}
+    result = {"context": context.model_dump() if context else None, "lines": results, "final_correct": final_correct}
+    if context_error:
+        result["context_error"] = context_error
+    return result
 
 def combine_lines(lines: list) -> str:
     texts = [line.get("data", "") for line in lines]

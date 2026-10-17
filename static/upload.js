@@ -1,8 +1,36 @@
 const storageStatus = document.getElementById('storage-status');
 const savedImages = document.getElementById('saved-images');
 let uploadPreviewURL;
+let activeImageId = null;
+let deleteNotice = null;
+
+function setActiveQuestion(imageId) {
+  activeImageId = imageId;
+  savedImages.querySelectorAll('.saved-image').forEach(item => {
+    const active = Number(item.dataset.imageId) === imageId;
+    item.classList.toggle('is-active', active);
+    const button = item.querySelector('.saved-image-open');
+    if (active) button.setAttribute('aria-current', 'true');
+    else button.removeAttribute('aria-current');
+  });
+}
+
+function showDeleteNotice(imageId, message) {
+  deleteNotice = message ? { imageId, message } : null;
+  savedImages.querySelectorAll('.saved-image').forEach(item => {
+    const notice = item.querySelector('.delete-notice');
+    const matches = deleteNotice && Number(item.dataset.imageId) === imageId;
+    notice.textContent = matches ? message : '';
+    notice.hidden = !matches;
+    if (matches) notice.scrollIntoView({ block: 'nearest' });
+  });
+}
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
+<<<<<<< HEAD
 const RESULT_VERSION = 3; // 3: results include related videos (redo ones saved without)
+=======
+const RESULT_VERSION = 2;
+>>>>>>> 35c014720f1369d63e67fb9498a370e06b395490
 
 function showResult(result) {
   document.getElementById('process-output').textContent = result == null ? '' : (
@@ -63,7 +91,14 @@ function showVideos(videos, query) {
 }
 
 function hasSavedResult(image) {
-  return image.result != null && image.resultVersion === RESULT_VERSION;
+  return image.result != null && !image.result.context_error && image.resultVersion === RESULT_VERSION;
+}
+
+function questionTitle(image) {
+  const context = image.result?.context;
+  const title = [context?.goal, context?.task, context?.problem_latex]
+    .find(value => typeof value === 'string' && value.trim());
+  return title ? title.trim().replace(/\s+/g, ' ') : image.file.name;
 }
 
 // Only the most recent request may update the screen, so a slow earlier upload
@@ -127,7 +162,10 @@ function showUploadPreview(file) {
   return preview;
 }
 
-document.getElementById('new-image').addEventListener('click', () => {
+function showHome() {
+  setActiveQuestion(null);
+  showDeleteNotice(null, '');
+  storageStatus.textContent = '';
   latestRequest++; // ignore any upload still in progress
   document.getElementById('image-result').hidden = true;
   showVideos([]);
@@ -142,7 +180,9 @@ document.getElementById('new-image').addEventListener('click', () => {
     block: 'start',
     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
   });
-});
+}
+
+document.getElementById('new-image').addEventListener('click', showHome);
 
 const database = new Promise((resolve, reject) => {
   const request = indexedDB.open('snap-solve', 1);
@@ -167,13 +207,25 @@ async function imageStore(mode, action) {
   });
 }
 
+async function deleteSavedImage(imageId) {
+  await imageStore('readwrite', store => store.delete(imageId));
+  if (imageId === activeImageId) showHome();
+}
+
 // Adds the server's result to an already-saved image record.
 async function saveResult(id, result) {
-  const record = await imageStore('readonly', store => store.get(id));
-  if (!record) return; // image was deleted while processing
-  record.result = result;
-  record.resultVersion = RESULT_VERSION;
-  await imageStore('readwrite', store => store.put(record));
+  // Keep the read and write atomic so a late result cannot recreate a deleted question.
+  await imageStore('readwrite', store => {
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const record = request.result;
+      if (!record) return;
+      record.result = result;
+      record.resultVersion = RESULT_VERSION;
+      store.put(record);
+    };
+    return request;
+  });
 }
 
 function updateSelection(input) {
@@ -186,14 +238,21 @@ async function showSavedImages() {
   storageStatus.textContent = '';
 
   for (const image of images.reverse()) {
+    const title = questionTitle(image);
     const item = document.createElement('li');
     item.className = 'saved-image';
+    item.dataset.imageId = image.id;
+    const notice = document.createElement('p');
+    notice.className = 'delete-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = deleteNotice?.imageId === image.id ? deleteNotice.message : '';
+    notice.hidden = !notice.textContent;
     const menu = document.createElement('details');
     menu.className = 'image-menu';
     const summary = document.createElement('summary');
-    summary.setAttribute('aria-label', `Actions for ${image.file.name}`);
+    summary.setAttribute('aria-label', `Actions for ${title}`);
     const name = document.createElement('span');
-    name.textContent = image.file.name;
+    name.textContent = title;
     const dots = document.createElement('span');
     dots.className = 'image-menu-dots';
     dots.textContent = '⋮';
@@ -205,9 +264,24 @@ async function showSavedImages() {
     use.type = 'button';
     use.className = 'saved-image-open';
     use.append(name);
-    use.title = image.file.name;
+    if (Number.isFinite(image.savedAt)) {
+      const created = document.createElement('time');
+      const date = new Date(image.savedAt);
+      created.className = 'question-created';
+      created.dateTime = date.toISOString();
+      created.textContent = date.toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+      });
+      created.title = `Created ${date.toLocaleString()}`;
+      use.append(created);
+    }
+    use.title = title;
     use.addEventListener('click', () => {
       menu.open = false;
+      setActiveQuestion(image.id);
+      showDeleteNotice(null, '');
+      storageStatus.textContent = '';
       if (hasSavedResult(image)) {
         // Already processed: show the saved result without asking the server again.
         latestRequest++; // ignore any upload still in progress
@@ -227,20 +301,22 @@ async function showSavedImages() {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.textContent = 'Delete';
-    remove.setAttribute('aria-label', `Delete ${image.file.name}`);
+    remove.setAttribute('aria-label', `Delete ${title}`);
     remove.addEventListener('click', async () => {
       try {
-        await imageStore('readwrite', store => store.delete(image.id));
+        await deleteSavedImage(image.id);
         await showSavedImages();
       } catch {
-        storageStatus.textContent = 'Could not delete this image. Please try again.';
+        menu.open = false;
+        showDeleteNotice(image.id, 'Could not delete this image. Please try again.');
       }
     });
     actions.append(remove);
     menu.append(summary, actions);
-    item.append(use, menu);
+    item.append(use, menu, notice);
     savedImages.append(item);
   }
+  setActiveQuestion(activeImageId);
 }
 
 document.querySelectorAll('.image-picker').forEach(button => {
@@ -292,6 +368,8 @@ document.querySelectorAll('.panel form').forEach(form => {
     const imageId = form.dataset.imageId ? Number(form.dataset.imageId) : null;
     delete form.dataset.imageId;
     if (!file) return;
+    setActiveQuestion(imageId);
+    showDeleteNotice(null, '');
     const requestId = ++latestRequest;
     const isLatest = () => requestId === latestRequest;
     const button = form.querySelector('.image-picker');
