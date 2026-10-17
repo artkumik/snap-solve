@@ -9,5 +9,13 @@
   <h1>SNAP-solver</h1>
 
   <img src="{{ url_for('static', path='/images/intelligent.png') }}" alt="A descriptive sentence about the image">
+
+  <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+    <label for="image">Choose an image</label>
+    <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp" aria-describedby="upload-help" required>
+    <p id="upload-help">JPEG, PNG, or WebP. Maximum 10 MB.</p>
+    <button type="submit">Upload</button>
+  </form>
+
 </body>
 </html>

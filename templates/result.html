@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uploaded image — SNAP-solver</title>
+</head>
+<body>
+  <h1>Image uploaded</h1>
+  <img src="{{ url_for('uploads', path=filename) }}" alt="Your uploaded image" style="max-width: 100%; height: auto;">
+  <p><a href="{{ url_for('index') }}">Upload another image</a></p>
+</body>
+</html>

@@ -223,3 +223,6 @@ __marimo__/
 .aws/
 .codex/
 .agents/
+
+# User-uploaded images
+uploads/
