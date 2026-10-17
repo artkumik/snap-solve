@@ -17,7 +17,6 @@
         </button>
         <input type="file" id="upload-image" name="image" accept="image/jpeg,image/png,image/webp" hidden>
         <p class="selected-file" aria-live="polite">No image selected</p>
-        <button type="submit">Continue</button>
       </form>
       <form action="/upload" method="post" enctype="multipart/form-data">
         <button class="image-picker" type="button" aria-controls="take-image">
@@ -26,14 +25,13 @@
         </button>
         <input type="file" id="take-image" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
         <p class="selected-file" aria-live="polite">No image selected</p>
-        <button type="submit">Continue</button>
       </form>
     </div>
     <p id="upload-error" role="alert" hidden></p>
     <img id="upload-preview" class="uploaded-image" alt="Uploaded image" hidden>
     <section class="saved-images" aria-labelledby="saved-heading">
       <h2 id="saved-heading">Saved images</h2>
-      <p>Saved in this browser. Continue sends an image to Python for processing in memory, without saving it on the server.</p>
+      <p>Saved in this browser. Selecting an image sends it to Python for processing in memory, without saving it on the server.</p>
       <p id="storage-status" role="status">Loading saved images…</p>
       <ul id="saved-images"></ul>
     </section>

@@ -38,7 +38,6 @@ async function imageStore(mode, action) {
 
 function updateSelection(input) {
   input.form.querySelector('.selected-file').textContent = input.files[0]?.name || 'No image selected';
-  input.form.querySelector('[type="submit"]').disabled = !input.files.length;
 }
 
 async function showSavedImages() {
@@ -65,9 +64,7 @@ async function showSavedImages() {
       transfer.items.add(image.file);
       input.files = transfer.files;
       updateSelection(input);
-      input.form.querySelector('[type="submit"]').focus({ preventScroll: true });
-      const preview = showUploadPreview(image.file);
-      preview.onload = () => preview.scrollIntoView({ block: 'start' });
+      input.form.requestSubmit();
     });
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -100,18 +97,17 @@ document.querySelectorAll('.image-picker').forEach(button => {
       storageStatus.textContent = 'Choose a JPEG, PNG, or WebP image, 10 MB or smaller.';
       return;
     }
-    const submit = input.form.querySelector('[type="submit"]');
-    submit.disabled = true;
     button.disabled = true;
     try {
       await imageStore('readwrite', store => store.add({ file, savedAt: Date.now() }));
       await showSavedImages();
     } catch {
-      storageStatus.textContent = 'Could not save locally. Browser storage may be unavailable or full. You can still Continue to upload.';
+      storageStatus.textContent = 'Could not save locally. Browser storage may be unavailable or full. The image will still be uploaded.';
     } finally {
       button.disabled = false;
       updateSelection(input);
     }
+    input.form.requestSubmit();
   });
 });
 
@@ -122,11 +118,12 @@ showSavedImages().catch(() => {
 document.querySelectorAll('.panel form').forEach(form => {
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    const file = form.querySelector('[type="file"]').files[0];
+    const input = form.querySelector('[type="file"]');
+    const file = input.files[0];
     if (!file) return;
-    const submit = form.querySelector('[type="submit"]');
+    const button = form.querySelector('.image-picker');
     const errorMessage = document.getElementById('upload-error');
-    submit.disabled = true;
+    button.disabled = true;
     errorMessage.hidden = true;
     try {
       const response = await fetch(form.action, {
@@ -138,12 +135,18 @@ document.querySelectorAll('.panel form').forEach(form => {
         const data = await response.json();
         throw new Error(data.detail || 'Image processing failed.');
       }
-      showUploadPreview(file);
+      const preview = showUploadPreview(file);
+      preview.onload = () => preview.scrollIntoView({
+        block: 'start',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      });
+      input.value = '';
+      updateSelection(input);
     } catch (error) {
       errorMessage.textContent = error.message || 'Could not process the image. Please try again.';
       errorMessage.hidden = false;
     } finally {
-      submit.disabled = false;
+      button.disabled = false;
     }
   });
 });

@@ -1,6 +1,7 @@
 import asyncio
 from io import BytesIO
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -30,11 +31,13 @@ async def post_image(body):
 
 class UploadTests(unittest.TestCase):
     def test_image_is_processed_without_disk_access(self):
+        request_thread = threading.get_ident()
         data = BytesIO()
         with Image.new("RGB", (2, 2)) as image:
             image.save(data, format="PNG")
 
         def process(image):
+            self.assertNotEqual(threading.get_ident(), request_thread)
             self.assertIsInstance(image, Image.Image)
             self.assertEqual(image.size, (2, 2))
             return True

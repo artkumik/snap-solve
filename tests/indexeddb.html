@@ -6,7 +6,6 @@
   <button type="button" class="image-picker" aria-controls="upload-image">Choose</button>
   <input type="file" id="upload-image" hidden>
   <p class="selected-file"></p>
-  <button type="submit">Continue</button>
 </form>
 <p id="storage-status"></p>
 <ul id="saved-images"></ul>
@@ -36,10 +35,15 @@
     await showSavedImages();
     const row = [...savedImages.children].find(row => row.querySelector('span').textContent === file.name);
     assert(row, 'Saved image missing from list');
-    row.querySelector('button').click();
     const input = document.getElementById('upload-image');
+    let submitted = false;
+    input.form.addEventListener('submit', event => {
+      event.preventDefault();
+      submitted = true;
+    }, { once: true });
+    row.querySelector('button').click();
     assert(input.files[0].name === file.name, 'Saved file not restored to upload input');
-    assert(!input.form.querySelector('[type="submit"]').disabled, 'Continue not enabled');
+    assert(submitted, 'Saved image did not automatically submit');
     await imageStore('readwrite', store => store.delete(id));
     assert(!(await imageStore('readonly', store => store.get(id))), 'Delete failed');
     document.getElementById('test-result').textContent = 'PASS: file persistence, saved list, reuse, and deletion';
