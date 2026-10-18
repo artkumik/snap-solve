@@ -21,8 +21,8 @@
             <input type="file" id="upload-image" name="image" multiple accept="image/jpeg,image/png,image/webp" hidden>
             <p class="selected-file" aria-live="polite">No image selected</p>
           </form>
-          <form action="/upload" method="post" enctype="multipart/form-data">
-            <button class="image-picker" type="button" aria-controls="take-image">
+          <form id="camera-form" action="/upload" method="post" enctype="multipart/form-data" hidden>
+            <button class="image-picker" type="button" aria-controls="take-image" disabled title="Camera is available on mobile devices">
               <span class="action-icon" style="--icon: url('{{ url_for('static', path='/icons/camera.png') }}')" aria-hidden="true"></span>
               Camera
             </button>
@@ -106,8 +106,10 @@
       <span class="box-heading sidebar-brand">snap solve</span>
       <button id="new-image" class="new-question" type="button">+ New problem</button>
       <h2 class="box-heading saved-heading">Your questions</h2>
+      <div class="sidebar-scroll" role="region" aria-label="Scrollable questions" tabindex="0">
       <p id="storage-status" role="status"></p>
       <ul id="saved-images"></ul>
+      </div>
       <div class="sidebar-footer">
         <div id="delete-all-confirmation" class="delete-all-confirmation" hidden>
           <p>Delete all questions and their saved images?</p>
@@ -119,6 +121,7 @@
       </div>
     </details>
   </main>
+  <script src="{{ url_for('static', path='/camera.js') }}?v={{ asset_version }}"></script>
   <script src="{{ url_for('static', path='/backdrop.js') }}?v={{ asset_version }}"></script>
   <script src="{{ url_for('static', path='/upload.js') }}?v={{ asset_version }}"></script>
   <script src="{{ url_for('static', path='/resize.js') }}?v={{ asset_version }}"></script>

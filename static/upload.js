@@ -7,6 +7,33 @@ let failedUpload = null;
 let activeFile = null;
 let activeQuestion = '';
 const sidebar = document.querySelector('.saved-images');
+const closingMenus = new WeakMap();
+document.addEventListener('click', event => {
+  document.querySelectorAll('.image-menu[open]').forEach(menu => {
+    if (menu.contains(event.target)) {
+      closingMenus.get(menu)?.cancel();
+      closingMenus.delete(menu);
+      return;
+    }
+    if (closingMenus.has(menu)) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      menu.open = false;
+      return;
+    }
+    const actions = menu.querySelector('.image-menu-actions');
+    const animation = actions.animate(
+      [{ opacity: getComputedStyle(actions).opacity }, { opacity: 0 }],
+      { duration: 120, easing: 'ease-out', fill: 'forwards' },
+    );
+    closingMenus.set(menu, animation);
+    animation.finished.then(() => {
+      if (closingMenus.get(menu) !== animation) return;
+      menu.open = false;
+      closingMenus.delete(menu);
+      animation.cancel();
+    }, () => {});
+  });
+});
 const processingQuestions = new Map();
 let sidebarCloseTimer;
 const hoverSidebar = window.matchMedia('(hover: hover) and (pointer: fine)');
