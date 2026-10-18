@@ -1,3 +1,15 @@
-torch 
-torchvision --index-url https://download.pytorch.org/whl/cu121
+# Extra packages for newEvaluate.py, train_texteller.py and mathwriting_prep.py
+# (the website itself only needs requirements.txt).
+#
+# PyTorch on PyPI is CPU-only on Windows, so pull the CUDA build from PyTorch's own index.
+# cu128 works with RTX 20/30/40/50-series cards and a recent NVIDIA driver; if pip still
+# installs a "+cpu" torch, see "Training and evaluation" in README.md.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch>=2.6
+torchvision>=0.21
 texteller
+editdistance
+tqdm
+numpy
+pandas
+pyarrow

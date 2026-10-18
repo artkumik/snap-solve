@@ -228,6 +228,10 @@ __marimo__/
 # User-uploaded images
 uploads/
 
+# Training checkpoints and evaluation output
+checkpoints/
+predictions*.csv
+
 # Local cropper images; keep the tool and empty folder placeholders tracked.
 /equation_cropper/input/*
 !/equation_cropper/input/.gitkeep

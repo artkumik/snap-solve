@@ -40,7 +40,9 @@ YOUTUBE_API_KEY=your-youtube-key-here
 The server loads this file automatically, including when started from another folder.
 Restart the server after changing the key. `.env` is ignored by Git; never commit it.
 Existing environment variables take precedence over values in `.env`.
-`GEMINI_MODEL` is optional; the default is `gemini-3.5-flash`.
+`GEMINI_MODEL` is optional. By default the server tries `gemini-3.5-flash`, then
+`gemini-3.5-flash-lite`, then `gemini-2.5-flash` when a model's daily quota runs out.
+To choose your own fallback order, set `GEMINI_MODELS` to a comma-separated list instead.
 
 Alternatively, set the key in your terminal before starting the server:
 
@@ -78,7 +80,50 @@ python -m pip install -r requirements.txt
 python -m uvicorn app:app --reload
 ```
 
+On Windows, activate the venv with `.venv\Scripts\Activate.ps1` instead of `source ...`.
+
 Open http://localhost:8000.
+
+## Training and evaluation (TexTeller)
+
+`newEvaluate.py`, `train_texteller.py` and `mathwriting_prep.py` need extra packages.
+Install them in the same environment as the website:
+
+```sh
+python -m pip install -r requirements-training.txt
+```
+
+That file pulls PyTorch's CUDA build. If PyTorch is **already installed** as the CPU-only
+build (a plain `pip install torch` on Windows gives you that), pip keeps the old one, so
+remove it first:
+
+```sh
+python -m pip uninstall -y torch torchvision
+python -m pip install -r requirements-training.txt
+```
+
+Check that the GPU is visible. This should print a `+cu…` version and `True`:
+
+```sh
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+If it shows `+cpu`, go to https://pytorch.org/get-started/locally/, pick
+Stable / Windows / Pip / the newest CUDA, run the command it gives, and then rerun
+`pip install -r requirements-training.txt`. You do not need the CUDA Toolkit, just a
+recent NVIDIA driver (`nvidia-smi` should list the GPU).
+
+```sh
+# Build a fixed 400-image sample from a MathWriting parquet file
+python mathwriting_prep.py "data/mathwriting_val/*.parquet" data/mathwriting_val --count 400
+# Score the pretrained model (or a fine-tuned one with --model-dir checkpoints/.../best)
+python newEvaluate.py --csv data/mathwriting_test/labels.csv --out predictions_baseline.csv
+# Fine-tune; the best checkpoint lands in <out_dir>/best
+python train_texteller.py --train_dir data/mathwriting_train --val_dir data/mathwriting_val --out_dir checkpoints/texteller_mw
+```
+
+Both scripts score predictions the same way (`latex_metrics.py`), so their numbers can be
+compared directly.
 
 ## Hosting online
 

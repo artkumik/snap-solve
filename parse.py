@@ -43,6 +43,18 @@ def gemini_models() -> list[str]:
     return [m.strip() for m in (os.getenv("GEMINI_MODELS") or os.getenv("GEMINI_MODEL") or DEFAULT_MODELS).split(",") if m.strip()]
 
 
+def request_config(model: str) -> dict:
+    config = {"response_mime_type": "application/json", "response_schema": ProblemContext}
+    # thinking_level only exists on Gemini 3+; 2.5 models reject it with a 400 (which would
+    # make the fallback model look "unknown" and get skipped for a day). They use a budget.
+    if model.startswith("gemini-2"):
+        if "flash" in model:
+            config["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    else:
+        config["thinking_config"] = types.ThinkingConfig(thinking_level="low")
+    return config
+
+
 def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
     """Ask Gemini what problem the student is solving."""
     prompt = (
@@ -77,8 +89,7 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
             response = client.models.generate_content(
                 model=model,
                 contents=prompt,
-                config={"response_mime_type": "application/json", "response_schema": ProblemContext,
-                        "thinking_config": types.ThinkingConfig(thinking_level="low")},
+                config=request_config(model),
             )
         except errors.APIError as exc:
             if exc.code == 429:  # this model's quota is used up; try the next one
@@ -170,7 +181,8 @@ def parse_image_lines(lines: list, question: str = "") -> dict:
         first, last = line.get("first_symbol"), line.get("last_symbol")
         if first and last:
             results[-1]["bounds"] = {"left": first["left"], "right": last["right"],
-                                     "top": first["top"], "bottom": first["bottom"]}
+                                     "top": min(first["top"], last["top"]),
+                                     "bottom": max(first["bottom"], last["bottom"])}
 
     for i in range(1, len(parsed)):
         if parsed[i - 1] is not None and parsed[i] is not None:

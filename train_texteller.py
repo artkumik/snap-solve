@@ -27,7 +27,6 @@ import csv
 import json
 import math
 import random
-import re
 import time
 from pathlib import Path
 
@@ -43,25 +42,12 @@ from transformers import GenerationConfig, get_cosine_schedule_with_warmup
 from texteller import load_model, load_tokenizer
 from texteller.utils import transform as texteller_transform  # TexTeller's own preprocessing
 
+from latex_metrics import tokens  # same normalization as newEvaluate.py
+
 
 # --------------------------------------------------------------------------
 # Metrics (identical normalization for baseline and every checkpoint)
 # --------------------------------------------------------------------------
-TOKEN = re.compile(r"\\[a-zA-Z]+|\\.|\S")
-
-
-def normalize(s: str) -> str:
-    s = s.strip().strip("$").strip()
-    s = re.sub(r"\\(left|right)(?![a-zA-Z])", "", s)
-    s = re.sub(r"\\(,|;|:|!|q?quad)(?![a-zA-Z])", "", s)
-    s = re.sub(r"\\[dt]frac(?![a-zA-Z])", r"\\frac", s)
-    return s
-
-
-def tokens(s: str):
-    return TOKEN.findall(normalize(s))
-
-
 def compute_metrics(preds, truths):
     dists, lens = [], []
     for p, t in zip(preds, truths):
@@ -178,12 +164,19 @@ class FormulaDataset(Dataset):
         return pixel_values, latex
 
 
-def make_collate(tokenizer, max_len):
-    def collate(batch):
+class Collate:
+    """Batch builder. A class rather than a nested function so DataLoader workers can
+    pickle it: on Windows, workers are separate processes and nested functions can't be sent."""
+
+    def __init__(self, tokenizer, max_len):
+        self.tokenizer, self.max_len = tokenizer, max_len
+
+    def __call__(self, batch):
+        tokenizer = self.tokenizer
         pixel_values = torch.stack([b[0] for b in batch])
         latex = [b[1] for b in batch]
         enc = tokenizer(
-            latex, padding=True, truncation=True, max_length=max_len, return_tensors="pt"
+            latex, padding=True, truncation=True, max_length=self.max_len, return_tensors="pt"
         )
         ids, mask = enc["input_ids"], enc["attention_mask"]
         # Decoder input:  <s> t1 ... tn </s> <pad>...
@@ -198,8 +191,6 @@ def make_collate(tokenizer, max_len):
             "labels": labels,
             "latex": latex,
         }
-
-    return collate
 
 
 # --------------------------------------------------------------------------
@@ -360,7 +351,9 @@ def main():
     train_ds.drop_long(tokenizer, args.max_len, "train")
     print(f"Train: {len(train_ds)} images | Val: {len(val_ds)} images")
 
-    collate = make_collate(tokenizer, args.max_len)
+    if not len(train_ds) or not len(val_ds):
+        raise SystemExit("Training and validation sets both need at least one usable image.")
+    collate = Collate(tokenizer, args.max_len)
     pin = device.type == "cuda"
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.workers,
@@ -368,7 +361,7 @@ def main():
     )
     val_loader = DataLoader(
         val_ds, batch_size=args.eval_batch_size, shuffle=False, num_workers=args.workers,
-        collate_fn=make_collate(tokenizer, 1024), pin_memory=pin, persistent_workers=args.workers > 0,
+        collate_fn=Collate(tokenizer, 1024), pin_memory=pin, persistent_workers=args.workers > 0,
     )
 
     # ---- optimizer / schedule ----
