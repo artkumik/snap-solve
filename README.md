@@ -19,70 +19,106 @@ flowchart TD
     B --> E[FastAPI: validate and normalize image]
     D --> E
     E --> F[process.py: detect and crop equation lines]
-    F --> G[Fine-tuned AI model: image to LaTeX]
+    F --> G[recognizer.py: fine-tuned TexTeller, image to LaTeX]
     G --> H[parse.py: analyze each step]
     H <--> I[Gemini: infer problem context]
     H --> J[SymPy: check validity and equivalence]
+    I --> V[videos.py: YouTube tutorials for the method]
     H --> K[JSON: line coordinates and feedback]
+    V --> K
     K --> L[Interactive highlights and step feedback]
     L --> M[IndexedDB: save questions in the browser]
 ```
 
+## What the website needs
+
+| Piece | What it does | Without it |
+| --- | --- | --- |
+| Python 3.12 and `requirements.txt` | The page, uploads, line detection, and SymPy checks | The site won't start |
+| Model packages: PyTorch, torchvision, and `texteller`, from `requirements-training.txt` | Read each line as LaTeX. `texteller` installs Hugging Face `transformers` (pinned to 4.47) itself | Lines are found but never read, so **nothing gets checked** |
+| The fine-tuned checkpoint, `checkpoints/texteller_mixed/best` (about 1.2 GB, not in Git) | The trained weights the model packages load | Same as above |
+| `GEMINI_API_KEY` in `.env` | Works out what problem is being solved, checks the final answer against it, and picks the video search phrase | Steps are still checked against each other, but there's no problem context, final-answer check, or videos |
+| `YOUTUBE_API_KEY` in `.env` | Related tutorial videos (needs Gemini too, since Gemini picks the search phrase) | No videos |
+
+So the model packages and the checkpoint are needed for the site to do its job;
+only the two API keys are truly optional.
+
+`requirements-training.txt` also installs a few packages only training and
+evaluation use (`editdistance`, `tqdm`, `pandas`, `pyarrow`); they're small and
+harmless on a server. `texteller` itself pulls in large extras the site never
+imports (Streamlit, Ray, ONNX Runtime), so expect the environment to take
+several GB of disk.
+
 ## Run locally
 
-From the repository root, choose one setup. Python 3.12 is recommended.
+From the repository root. Python 3.12 is recommended (`texteller` needs 3.10 or
+newer).
 
-### Conda
+### 1. Create an environment
+
+Conda:
 
 ```bash
 conda create --name snap-solve python=3.12 pip -y
 conda activate snap-solve
-python -m pip install -r requirements.txt
-python -m uvicorn app:app --reload
 ```
 
-### pip and venv
+Or pip and venv:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m uvicorn app:app --reload
 ```
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
 
-Open **http://localhost:8000**.
-
-### Optional API configuration
-
-For problem context and related video support, copy `.env.example` to `.env` in
-the repository root and fill in your keys:
-
-```dotenv
-GEMINI_API_KEY=your-key-here
-YOUTUBE_API_KEY=your-youtube-key-here
-```
-
-`parse.py` loads `.env` automatically. Restart the server after editing it.
-Line detection works without API keys. Gemini requires `GEMINI_API_KEY`;
-related video lookup in `videos.py` requires `YOUTUBE_API_KEY`.
-
-### Handwriting model
-
-Reading each line as LaTeX uses the fine-tuned TexTeller model. Install its packages
-(see [Training and evaluation](#training-and-evaluation-texteller) for the CUDA build):
+### 2. Install the packages
 
 ```bash
+python -m pip install -r requirements.txt
 python -m pip install -r requirements-training.txt
 ```
 
-The server loads the model from `checkpoints/texteller_mixed/best` when it starts, on
-the GPU if PyTorch can see one. To use a different checkpoint, set
-`TEXTELLER_MODEL_DIR` in `.env`; `TEXTELLER_DEVICE=cpu` forces the CPU. The
-checkpoint is about 1.2 GB and is not in Git, so copy the `best` folder to each
-machine that runs the site. Without the packages or the checkpoint, the site still
-detects lines but leaves them unread, and the console says why.
+Then check that PyTorch can use the GPU:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+On a machine with an NVIDIA card this should print a version ending in `+cu…`
+and `True`. If it prints `+cpu` or `False`, see
+[Getting the CUDA build of PyTorch](#getting-the-cuda-build-of-pytorch). The
+site still works on the CPU, just slower.
+
+### 3. Add the model and keys
+
+1. Copy the checkpoint's `best` folder to `checkpoints/texteller_mixed/best`, or
+   set `TEXTELLER_MODEL_DIR` in `.env` to wherever it is.
+2. Copy `.env.example` to `.env` and fill in your keys.
+
+| Setting in `.env` | Meaning |
+| --- | --- |
+| `GEMINI_API_KEY` | Gemini key (`GOOGLE_API_KEY` also works) |
+| `GEMINI_MODEL` or `GEMINI_MODELS` | Model, or a comma-separated list tried in order when one runs out of quota. Default: `gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash` |
+| `YOUTUBE_API_KEY` | YouTube Data API key for related videos |
+| `TEXTELLER_MODEL_DIR` | Checkpoint folder. Default: `checkpoints/texteller_mixed/best` |
+| `TEXTELLER_DEVICE` | `cuda` or `cpu`. Default: the GPU when PyTorch can see one |
+
+Restart the server after editing `.env`.
+
+### 4. Start the server
+
+```bash
+python -m uvicorn app:app --reload
+```
+
+Open **http://localhost:8000**.
+
+The model loads in the background as the server starts, and the console says
+how it went: `Handwriting model loaded from … on <GPU name>` when it worked, or
+`Handwriting recognition is off: …` with the reason when it didn't. With
+`--reload`, every saved code change restarts the server and loads the model
+again; leave `--reload` off when you aren't editing code.
 
 ## Architecture
 
@@ -93,9 +129,10 @@ thread pool so it does not block the server's event loop.
 | Location | Responsibility |
 | --- | --- |
 | `app.py` | Routes, upload limits, image normalization, and background processing |
-| `process.py` | Line detection, in-memory crops, and the image-to-LaTeX hook |
+| `process.py` | Line detection and in-memory crops; hands crops to `recognizer.py`, then the LaTeX to `parse.py` and the search phrase to `videos.py` |
 | `recognizer.py` | Loads the fine-tuned TexTeller model and reads line crops as LaTeX |
 | `parse.py` | SymPy checks and Gemini problem context |
+| `videos.py` | YouTube search for tutorials on the problem's method |
 | `templates/`, `static/` | Interface, image overlays, sidebar, and browser storage |
 | `equation_cropper/` | Standalone tool for preparing equation crops |
 | `train_texteller.py` | Fine-tuning the image-to-LaTeX model |
@@ -126,6 +163,28 @@ Training dependencies target an NVIDIA CUDA setup. The best checkpoint is saved
 to `<out_dir>/best`, here `checkpoints/texteller_mw/best`. The website reads
 handwriting with `checkpoints/texteller_mixed/best` unless `TEXTELLER_MODEL_DIR`
 points elsewhere.
+
+### Getting the CUDA build of PyTorch
+
+PyTorch on PyPI is CPU-only on Windows, so `requirements-training.txt` also
+looks in PyTorch's own CUDA index (`cu128`, for RTX 20/30/40/50-series cards and
+a recent NVIDIA driver). pip can still end up with a `+cpu` build, for example
+when PyPI has a newer version number. Check with:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+If it shows `+cpu` or `False`, replace PyTorch with the CUDA build, then check
+again:
+
+```bash
+python -m pip install --force-reinstall --no-deps torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
+
+If pip can't find a matching version there, the
+[PyTorch install page](https://pytorch.org/get-started/locally/) lists the
+current CUDA index to use in place of `cu128`.
 
 ## Standalone equation cropping
 
