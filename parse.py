@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from google import genai
 from google.genai import errors, types
@@ -32,11 +32,18 @@ SIZED_BRACKET = re.compile(r"\\(?:left|right)(?![a-zA-Z])\s*(\\[{}]|[()\[\]|.])"
 STRICT = {"strict": True} if "strict" in inspect.signature(parse_latex).parameters else {}
 
 class ProblemContext(BaseModel):
-    task: str
-    goal: str
+    task: str = Field(description="Plain-language problem description. No LaTeX commands, math delimiters, or code.")
+    goal: str = Field(description="Plain-language question for the student. No LaTeX commands, math delimiters, or code.")
     variables: list[str]
     problem_latex: str
     video_query: str
+
+    @field_validator("task", "goal")
+    @classmethod
+    def keep_problem_about_math(cls, value: str) -> str:
+        if re.search(r"\b(?:latex|tex|ocr|transcription|formatting|markup)\b|\\[a-zA-Z]+|```", value, re.I):
+            return "Review the mathematical steps in this problem."
+        return value
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +82,16 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
     prompt = (
         "These are lines of a student's handwritten math work, transcribed to LaTeX, "
         "one per line. Identify what problem they are solving. Do not solve it.\n"
+        "For task and goal, write a concise problem statement in plain language for the student. "
+        "Use words or ordinary Unicode math symbols. Do not include LaTeX commands, "
+        "dollar-sign math delimiters, code blocks, or references to LaTeX or transcription. "
+        "Keep any LaTeX source exclusively in problem_latex, which is used internally.\n"
+        "The student's problem is mathematics, never LaTeX, programming, OCR, or formatting. "
+        "Treat the supplied LaTeX only as a representation of their math work. "
+        "Never make task or goal ask the student to fix, explain, convert, or write LaTeX, "
+        "even if the transcription is malformed. Infer the underlying mathematical task; "
+        "if it is unclear, say 'Review the mathematical steps in this problem.' "
+        "Do not invent a notation-repair or code-debugging problem.\n"
         "For problem_latex, give the original problem as one LaTeX equation or expression, "
         "for example 'x^2 = 3x' or '\\lim_{x \\to \\infty} x^2'.\n"
         "For video_query, give a short YouTube search phrase (3 to 8 words) for a tutorial "

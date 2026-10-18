@@ -188,13 +188,7 @@ document.getElementById('problem-editor').addEventListener('submit', async event
       });
     }
     if (activeImageId !== imageId || activeFile !== file) return;
-    const input = document.getElementById('upload-image');
-    const transfer = new DataTransfer();
-    transfer.items.add(file);
-    input.files = transfer.files;
-    if (imageId !== null) input.form.dataset.imageId = imageId;
-    input.form.dataset.question = question;
-    input.form.requestSubmit();
+    await processUpload(document.getElementById('upload-image').form, file, imageId, question);
   } catch {
     const error = document.getElementById('problem-edit-error');
     error.textContent = 'Could not save your problem. Please try again.';
@@ -232,13 +226,7 @@ document.addEventListener('pointerdown', event => {
 
 document.getElementById('retry-processing').addEventListener('click', () => {
   if (!failedUpload) return;
-  const input = document.getElementById('upload-image');
-  const transfer = new DataTransfer();
-  transfer.items.add(failedUpload.file);
-  input.files = transfer.files;
-  if (failedUpload.imageId !== null) input.form.dataset.imageId = failedUpload.imageId;
-  input.form.dataset.question = failedUpload.question || '';
-  input.form.requestSubmit();
+  processUpload(document.getElementById('upload-image').form, failedUpload.file, failedUpload.imageId, failedUpload.question || '');
 });
 
 async function markQuestionOpened(imageId) {
@@ -285,7 +273,7 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 11; // 11: lines are read by the fine-tuned TexTeller model
+const RESULT_VERSION = 12; // 12: plain-language problem summaries, with LaTeX kept internal
 
 function isIncorrect(line) {
   return line.valid === false || line.follows_from_previous === false || !!line.error;
@@ -490,11 +478,24 @@ async function shrinkImage(file) {
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
-    return file; // can't decode here; the server will report the problem
+    // Some mobile browsers cannot decode this file with createImageBitmap.
+    const url = URL.createObjectURL(file);
+    try {
+      bitmap = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Could not read this image.'));
+        image.src = url;
+      });
+    } catch {
+      return file; // Let the server return an image-format error.
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
   const scale = MAX_SIDE / Math.max(bitmap.width, bitmap.height);
   if (scale >= 1) {
-    bitmap.close();
+    bitmap.close?.();
     return file; // already small enough: keep the original exactly
   }
   const canvas = document.createElement('canvas');
@@ -504,9 +505,9 @@ async function shrinkImage(file) {
   context.fillStyle = '#fff'; // transparent areas become white instead of black
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
+  bitmap.close?.();
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-  if (!blob || blob.size >= file.size) return file;
+  if (!blob) throw new Error('Could not resize this image.');
   const name = file.name.replace(/\.[^.]*$/, '') + '.jpg';
   return new File([blob], name, { type: 'image/jpeg', lastModified: file.lastModified });
 }
@@ -744,14 +745,7 @@ async function showSavedImages() {
         showResult(image.result);
         return;
       }
-      const input = document.getElementById('upload-image');
-      const transfer = new DataTransfer();
-      transfer.items.add(image.file);
-      input.files = transfer.files;
-      updateSelection(input);
-      input.form.dataset.imageId = image.id;
-      input.form.dataset.question = image.question || '';
-      input.form.requestSubmit();
+      processUpload(document.getElementById('upload-image').form, image.file, image.id, image.question || '');
     });
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -874,7 +868,13 @@ document.querySelectorAll('.image-picker').forEach(button => {
           rejected.push(original.name);
           continue;
         }
-        const file = await shrinkImage(original);
+        let file;
+        try {
+          file = await shrinkImage(original);
+        } catch {
+          rejected.push(original.name);
+          continue;
+        }
         if (file.size > MAX_UPLOAD_BYTES) {
           rejected.push(original.name);
           continue;
