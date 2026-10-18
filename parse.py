@@ -1,5 +1,7 @@
+import inspect
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -14,7 +16,20 @@ from sympy import Eq, FiniteSet, S, simplify, solveset, Symbol
 from sympy.logic.boolalg import BooleanFalse, BooleanTrue
 from sympy.parsing.latex import parse_latex
 
+from latex_metrics import strip_delims
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
+
+# The handwriting model writes LaTeX the way its training data does, e.g. "sin(z)" without
+# a backslash, which SymPy would read as s*i*n(z). clean_latex() fixes such spellings.
+FUNCTION_NAMES = re.compile(r"(?<![\\a-zA-Z])(arcsin|arccos|arctan|sinh|cosh|tanh|sin|cos|tan"
+                            r"|sec|csc|cot|log|ln|exp|lim)(?![a-zA-Z])")
+STYLE_COMMANDS = re.compile(r"\\(?:displaystyle|textstyle|limits)(?![a-zA-Z])")
+# \left| would be read as a quantum "ket"; plain brackets mean the same thing here.
+SIZED_BRACKET = re.compile(r"\\(?:left|right)(?![a-zA-Z])\s*(\\[{}]|[()\[\]|.])")
+# Strict parsing rejects lines SymPy can only partly read (it would otherwise read
+# "x = 0, x = 3" as just x = 0). Older SymPy versions don't have the option.
+STRICT = {"strict": True} if "strict" in inspect.signature(parse_latex).parameters else {}
 
 class ProblemContext(BaseModel):
     task: str
@@ -118,10 +133,21 @@ def get_context(lines_text: str, question: str = "") -> ProblemContext | None:
                 "limits reset at midnight Pacific time. The math checks still work without it.")
     return None
 
+def clean_latex(latex: str) -> str:
+    """Rewrite the model's LaTeX into the forms SymPy's parser reads correctly."""
+    latex = STYLE_COMMANDS.sub(" ", strip_delims(latex))
+    latex = SIZED_BRACKET.sub(lambda match: "" if match.group(1) == "." else match.group(1), latex)
+    return FUNCTION_NAMES.sub(r"\\\1 ", latex).strip()
+
+
+def read_latex(latex: str):
+    return parse_latex(clean_latex(latex), **STRICT)
+
+
 def check_line(latex: str):
     """Returns (sympy_object, None) if valid, or (None, error_message) if not."""
     try:
-        expr = parse_latex(latex)
+        expr = read_latex(latex)
     except Exception:
         return None, "Couldn't read this line as math."
 
@@ -155,7 +181,7 @@ def reaches_goal(final, context: ProblemContext | None, var: Symbol):
     if context is None:
         return None
     try:
-        problem = parse_latex(context.problem_latex)
+        problem = read_latex(context.problem_latex)
         return meaning(problem, var) == meaning(final, var)
     except Exception:
         return None
@@ -166,7 +192,8 @@ def parse_image_lines(lines: list, question: str = "") -> dict:
     if any(line.get("data", "").strip() for line in lines):
         try:
             context = get_context(combine_lines(lines), question)
-            if context is None:
+            # Without an API key there's nothing to retry; the math checks run without context.
+            if context is None and (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
                 context_error = "Gemini returned no context. Open this question again to retry."
         except RuntimeError as exc:
             context_error = str(exc)

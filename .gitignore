@@ -237,3 +237,6 @@ predictions*.csv
 !/equation_cropper/input/.gitkeep
 /equation_cropper/output/*
 !/equation_cropper/output/.gitkeep
+
+# Training and evaluation datasets (large; kept local)
+data/

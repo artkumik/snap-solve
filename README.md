@@ -68,6 +68,22 @@ YOUTUBE_API_KEY=your-youtube-key-here
 Line detection works without API keys. Gemini requires `GEMINI_API_KEY`;
 related video lookup in `videos.py` requires `YOUTUBE_API_KEY`.
 
+### Handwriting model
+
+Reading each line as LaTeX uses the fine-tuned TexTeller model. Install its packages
+(see [Training and evaluation](#training-and-evaluation-texteller) for the CUDA build):
+
+```bash
+python -m pip install -r requirements-training.txt
+```
+
+The server loads the model from `checkpoints/texteller_mixed/best` when it starts, on
+the GPU if PyTorch can see one. To use a different checkpoint, set
+`TEXTELLER_MODEL_DIR` in `.env`; `TEXTELLER_DEVICE=cpu` forces the CPU. The
+checkpoint is about 1.2 GB and is not in Git, so copy the `best` folder to each
+machine that runs the site. Without the packages or the checkpoint, the site still
+detects lines but leaves them unread, and the console says why.
+
 ## Architecture
 
 `process.py` handles images and LaTeX extraction; `parse.py` owns LaTeX parsing,
@@ -78,6 +94,7 @@ thread pool so it does not block the server's event loop.
 | --- | --- |
 | `app.py` | Routes, upload limits, image normalization, and background processing |
 | `process.py` | Line detection, in-memory crops, and the image-to-LaTeX hook |
+| `recognizer.py` | Loads the fine-tuned TexTeller model and reads line crops as LaTeX |
 | `parse.py` | SymPy checks and Gemini problem context |
 | `templates/`, `static/` | Interface, image overlays, sidebar, and browser storage |
 | `equation_cropper/` | Standalone tool for preparing equation crops |
@@ -106,8 +123,9 @@ python newEvaluate.py --csv data/mathwriting_test/labels.csv --model-dir checkpo
 ```
 
 Training dependencies target an NVIDIA CUDA setup. The best checkpoint is saved
-to `checkpoints/texteller_mw/best`. Model training is separate from running the
-website.
+to `<out_dir>/best`, here `checkpoints/texteller_mw/best`. The website reads
+handwriting with `checkpoints/texteller_mixed/best` unless `TEXTELLER_MODEL_DIR`
+points elsewhere.
 
 ## Standalone equation cropping
 

@@ -1,4 +1,6 @@
 import asyncio
+import threading
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 
@@ -8,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+import recognizer
 from process import process_image
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -20,7 +23,15 @@ WORK_SIDE = 2048
 # wait on Gemini, so this keeps memory bounded on a small host. Extra uploads wait their turn.
 MAX_CONCURRENT = 4
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the handwriting model in the background: the site is up right away, and the
+    # first upload only waits for whatever loading is left.
+    threading.Thread(target=recognizer.load, name="load-handwriting-model", daemon=True).start()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 processing_slots = asyncio.Semaphore(MAX_CONCURRENT)

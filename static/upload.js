@@ -258,7 +258,7 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 10; // 10: explicit processing success with detected line bounds
+const RESULT_VERSION = 11; // 11: lines are read by the fine-tuned TexTeller model
 
 function isIncorrect(line) {
   return line.valid === false || line.follows_from_previous === false || !!line.error;
