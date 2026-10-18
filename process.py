@@ -21,22 +21,20 @@ def split_image_lines(
     """
     if not 1 <= threshold <= 255 or gap < 1 or padding < 0:
         raise ValueError("Use threshold 1–255, gap >= 1, and padding >= 0.")
-    upright = ImageOps.exif_transpose(image).convert("RGBA")
-    paper = Image.new("RGB", upright.size, "white")
-    paper.paste(upright, mask=upright.getchannel("A"))
-    boxes = equation_boxes(paper, threshold=threshold, gap=gap, padding=padding)
+    working_image = ImageOps.exif_transpose(image).convert("RGB")
+    boxes = equation_boxes(working_image, threshold=threshold, gap=gap, padding=padding)
     lines = []
     for number, (left, top, right, bottom) in enumerate(sorted(boxes, key=lambda box: box[1]), 1):
-        with paper.crop((left, top, right, bottom)) as line_image:
+        with working_image.crop((left, top, right, bottom)) as line_image:
             equation = read_equation(line_image)
         lines.append({
             "line": number,
             "data": equation,
             "bounds": {
-                "left": left / paper.width,
-                "top": top / paper.height,
-                "right": right / paper.width,
-                "bottom": bottom / paper.height,
+                "left": left / working_image.width,
+                "top": top / working_image.height,
+                "right": right / working_image.width,
+                "bottom": bottom / working_image.height,
             },
         })
     return lines
