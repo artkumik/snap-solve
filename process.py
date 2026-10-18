@@ -1,16 +1,12 @@
 from PIL import Image, ImageOps
 
 from equation_cropper.crop_equations import equation_boxes
+from parse import parse_image_lines
 
 
 def read_equation(line_image: Image.Image) -> str:
-    """Placeholder for reading one cropped equation. No recognition yet."""
+    """Placeholder for extracting LaTeX from a cropped line; no recognition yet."""
     return ""
-
-
-def check_equation(equation: str) -> bool | None:
-    """Placeholder for checking an equation. None means not checked."""
-    return None
 
 
 def split_image_lines(
@@ -35,10 +31,7 @@ def split_image_lines(
             equation = read_equation(line_image)
         lines.append({
             "line": number,
-            "latex": equation,
-            "valid": check_equation(equation),
-            "error": None,
-            "follows_from_previous": None,
+            "data": equation,
             "bounds": {
                 "left": left / paper.width,
                 "top": top / paper.height,
@@ -50,12 +43,11 @@ def split_image_lines(
 
 
 def process_image(image: Image.Image, question: str = "") -> dict:
-    """Detect actual image lines only; recognition and math checking are disabled."""
-    return {
+    """Detect/crop lines, extract LaTeX, and delegate checking/context to parse.py."""
+    result = parse_image_lines(split_image_lines(image), question)
+    result.update({
         "success": True,
         "mode": "line_detection",
-        "context": None,
-        "lines": split_image_lines(image),
-        "final_correct": None,
         "videos": [],
-    }
+    })
+    return result

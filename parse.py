@@ -162,24 +162,27 @@ def reaches_goal(final, context: ProblemContext | None, var: Symbol):
 
 def parse_image_lines(lines: list, question: str = "") -> dict:
     context_error = None
-    try:
-        context = get_context(combine_lines(lines), question)
-        if context is None:
-            context_error = "Gemini returned no context. Open this question again to retry."
-    except RuntimeError as exc:
-        context = None
-        context_error = str(exc)
+    context = None
+    if any(line.get("data", "").strip() for line in lines):
+        try:
+            context = get_context(combine_lines(lines), question)
+            if context is None:
+                context_error = "Gemini returned no context. Open this question again to retry."
+        except RuntimeError as exc:
+            context_error = str(exc)
     var = Symbol(context.variables[0]) if context and context.variables else Symbol("x")
 
     results, parsed = [], []
     for i, line in enumerate(lines, start=1):
         text = line.get("data", "")
-        expr, error = check_line(text)
+        expr, error = check_line(text) if text.strip() else (None, None)
         parsed.append(expr)
-        results.append({"line": i, "latex": text, "valid": error is None,
+        results.append({"line": i, "latex": text, "valid": error is None if text.strip() else None,
                         "error": error, "follows_from_previous": None})
         first, last = line.get("first_symbol"), line.get("last_symbol")
-        if first and last:
+        if "bounds" in line:
+            results[-1]["bounds"] = line["bounds"]
+        elif first and last:
             results[-1]["bounds"] = {"left": first["left"], "right": last["right"],
                                      "top": min(first["top"], last["top"]),
                                      "bottom": max(first["bottom"], last["bottom"])}
