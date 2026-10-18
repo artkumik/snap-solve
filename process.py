@@ -13,7 +13,8 @@ def split_image_lines(
 
     Bounds are normalized to the upright image: left/right are fractions of its
     width, top/bottom of its height. No images are written to disk. Intended for
-    dark writing on a light, single-column background; increase gap to keep
+    dark writing on a light, single-column background, including shaded camera
+    photos of paper or screens; increase gap to keep
     vertically separated symbols, such as fractions, together. The crops are read
     together by the fine-tuned TexTeller model (recognizer.py).
     """

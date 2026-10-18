@@ -273,7 +273,7 @@ function showDeleteNotice(imageId, message) {
   });
 }
 // Bump this whenever the Python processing changes, so results saved by older code are redone.
-const RESULT_VERSION = 12; // 12: plain-language problem summaries, with LaTeX kept internal
+const RESULT_VERSION = 13; // 13: separate equations in shaded paper and screen photos
 
 function isIncorrect(line) {
   return line.valid === false || line.follows_from_previous === false || !!line.error;

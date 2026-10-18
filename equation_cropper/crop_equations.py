@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parent
 IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp"}
@@ -13,25 +13,52 @@ def equation_boxes(image, threshold=190, gap=18, padding=12):
     """Find dark equation rows; return padded (left, top, right, bottom) boxes."""
     gray = ImageOps.grayscale(image)
     mask = gray.point(lambda value: 255 if value < threshold else 0)
-    minimum_ink = max(2, image.width // 1000)
+    # A fixed cutoff mistakes shaded paper and photographed screens for writing.
+    photographed = mask.histogram()[255] > image.width * image.height / 4
+    if photographed:
+        gray.thumbnail((1600, 1600))
+        gray = gray.filter(ImageFilter.GaussianBlur(1))
+        background = gray.filter(ImageFilter.GaussianBlur(max(3, max(gray.size) * 15 / 1600)))
+        mask = ImageChops.subtract(background, gray).point(lambda value: 255 if value > 30 else 0)
+        # Remove thin notebook rules and screen moire before discarding frame edges.
+        size = 5 if max(gray.size) >= 1200 else 3
+        mask = mask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+        pixels = mask.load()
+        edges = ([(x, y) for x in range(mask.width) for y in (0, mask.height - 1)]
+                 + [(x, y) for y in range(mask.height) for x in (0, mask.width - 1)])
+        for point in edges:
+            if pixels[point]:
+                ImageDraw.floodfill(mask, point, 0)
+        if size > 3:
+            mask = mask.filter(ImageFilter.MinFilter(size)).filter(ImageFilter.MaxFilter(size))
+    minimum_ink = max(3, mask.width // 200) if photographed else max(2, image.width // 1000)
+    scale_x, scale_y = image.width / mask.width, image.height / mask.height
+    row_gap = max(18, round(gap / scale_y)) if photographed else gap
     groups = []
-    for y in range(image.height):
-        row = mask.crop((0, y, image.width, y + 1))
+    for y in range(mask.height):
+        row = mask.crop((0, y, mask.width, y + 1))
         if row.histogram()[255] < minimum_ink:
             continue
-        if groups and y - groups[-1][1] < gap:
+        if groups and y - groups[-1][1] < row_gap:
             groups[-1][1] = y + 1
         else:
             groups.append([y, y + 1])
 
     boxes = []
     for top, bottom in groups:
-        bounds = mask.crop((0, top, image.width, bottom)).getbbox()
+        band = mask.crop((0, top, mask.width, bottom))
+        bounds = band.getbbox()
         if bounds is None:
             continue
         left, _, right, _ = bounds
         if right - left < 12 or bottom - top < 6:
             continue  # Ignore small specks.
+        if photographed:
+            width, height = right - left, bottom - top
+            if width > height * 30 or band.histogram()[255] / (width * height) < 0.03:
+                continue  # Thin rules, monitor edges, and sparse paper creases.
+        left, top = int(left * scale_x), int(top * scale_y)
+        right, bottom = round(right * scale_x), round(bottom * scale_y)
         boxes.append((max(0, left - padding), max(0, top - padding),
                       min(image.width, right + padding), min(image.height, bottom + padding)))
     return boxes
